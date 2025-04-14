@@ -14,6 +14,9 @@ app = Flask(__name__)
 CORS(app, supports_credentials=True)  # 세션을 위한 credentials 지원
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'your-secret-key-here')  # 세션을 위한 시크릿 키
 
+# # 스레드 풀 생성
+# thread_pool = ThreadPoolExecutor(max_workers=5)
+
 # MariaDB 연결 함수
 def get_db_connection():
     return mysql.connector.connect(
@@ -80,6 +83,9 @@ def async_log_api_stats(endpoint, method, status, user_id):
     
     # 새로운 스레드에서 로깅 실행
     Thread(target=_log).start()
+    
+    #  # 스레드 풀을 사용하여 작업 실행
+    # thread_pool.submit(_log)
 
 # 로그인 데코레이터
 def login_required(f):
