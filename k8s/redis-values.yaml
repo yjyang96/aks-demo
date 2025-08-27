@@ -1,0 +1,7 @@
+fullnameOverride: "${REDIS_HOST}"
+
+auth:
+  enabled: true
+  password: "${REDIS_PASSWORD}"
+
+architecture: standalone

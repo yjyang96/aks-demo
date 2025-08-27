@@ -1,0 +1,10 @@
+fullnameOverride: "${KAFKA_SERVERS}"
+
+controller:
+  replicaCount: 1
+
+broker:
+  replicaCount: 1
+
+auth:
+  enabled: false
