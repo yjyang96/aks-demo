@@ -23,7 +23,7 @@
 
     <div v-else>
       <div class="user-info">
-        <span>안녕하세요, {{ username }}님</span>
+        <span>안녕하세요, {{ currentUser }}님</span>
         <button @click="logout">로그아웃</button>
       </div>
 
@@ -217,6 +217,7 @@ export default {
         this.isLoggedIn = false;
         this.username = '';
         this.password = '';
+        this.currentUser = null;
       } catch (error) {
         console.error('로그아웃 실패:', error);
       }
