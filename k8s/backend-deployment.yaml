@@ -30,7 +30,7 @@ spec:
               name: backend-secrets
               key: MYSQL_PASSWORD
         - name: REDIS_HOST
-          value: "my-redis-master"
+          value: "redis-master"
         - name: KAFKA_SERVERS
           value: "my-kafka:9092"
         - name: REDIS_PASSWORD
