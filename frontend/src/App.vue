@@ -45,12 +45,47 @@
             <p>데이터를 불러오는 중...</p>
           </div>
           <div v-if="dbData.length && !loading">
-            <h3>내 메시지:</h3>
+            <h3>내 메시지 (총 {{ totalMessages }}개):</h3>
             <ul>
               <li v-for="item in dbData" :key="item.id">
                 {{ item.message }} ({{ formatDate(item.created_at) }}) - {{ item.user_id }}
               </li>
             </ul>
+            
+            <!-- 페이지네이션 정보 -->
+            <div class="pagination-info">
+              <p>페이지 {{ currentPage }} / {{ totalPages }} (총 {{ totalMessages }}개 중 {{ dbData.length }}개 표시)</p>
+            </div>
+            
+            <!-- 페이지네이션 버튼 -->
+            <div class="pagination">
+              <button @click="goToFirstPage" :disabled="currentPage === 1 || loading" class="page-btn">
+                처음
+              </button>
+              <button @click="goToPrevPage" :disabled="currentPage === 1 || loading" class="page-btn">
+                이전
+              </button>
+              
+              <!-- 페이지 번호 버튼들 -->
+              <div class="page-numbers">
+                <button 
+                  v-for="page in getVisiblePages()" 
+                  :key="page"
+                  @click="goToPage(page)"
+                  :class="['page-number', { active: page === currentPage }]"
+                  :disabled="loading"
+                >
+                  {{ page }}
+                </button>
+              </div>
+              
+              <button @click="goToNextPage" :disabled="currentPage === totalPages || loading" class="page-btn">
+                다음
+              </button>
+              <button @click="goToLastPage" :disabled="currentPage === totalPages || loading" class="page-btn">
+                마지막
+              </button>
+            </div>
           </div>
         </div>
 
@@ -202,10 +237,12 @@ export default {
         '마이크로서비스 테스트 중입니다.',
         '샘플 메시지 입니다.'
       ],
-      offset: 0,
       limit: 20,
       loading: false,
-      hasMore: true,
+      // 페이지네이션 정보
+      currentPage: 1,
+      totalPages: 1,
+      totalMessages: 0,
       showRegister: false,
       registerUsername: '',
       registerPassword: '',
@@ -267,9 +304,21 @@ export default {
     async getFromDb() {
       try {
         this.loading = true;
-        const response = await axios.get(`${API_BASE_URL}/db/message?offset=${this.offset}&limit=${this.limit}`);
-        this.dbData = response.data;
-        this.hasMore = response.data.length === this.limit;
+        const response = await axios.get(`${API_BASE_URL}/db/message?page=${this.currentPage}&limit=${this.limit}`);
+        
+        // 페이지네이션 정보 처리
+        if (response.data.messages) {
+          // 항상 현재 페이지 데이터로 교체 (중복 방지)
+          this.dbData = response.data.messages;
+          
+          // 페이지네이션 정보 업데이트
+          this.totalMessages = response.data.pagination.total;
+          this.currentPage = response.data.pagination.current_page;
+          this.totalPages = response.data.pagination.total_pages;
+        } else {
+          // 기존 형식 호환성 유지
+          this.dbData = response.data;
+        }
       } catch (error) {
         console.error('DB 조회 실패:', error);
       } finally {
@@ -455,10 +504,76 @@ export default {
       }
     },
 
-    // 페이지네이션을 위한 추가 데이터 로드
-    async loadMore() {
-      this.offset += this.limit;
-      await this.getFromDb();
+    // 특정 페이지로 이동
+    async goToPage(page) {
+      if (page >= 1 && page <= this.totalPages && page !== this.currentPage) {
+        this.currentPage = page;
+        await this.getFromDb();
+      }
+    },
+
+    // 이전 페이지로 이동
+    async goToPrevPage() {
+      if (this.currentPage > 1) {
+        this.currentPage--;
+        await this.getFromDb();
+      }
+    },
+
+    // 다음 페이지로 이동
+    async goToNextPage() {
+      if (this.currentPage < this.totalPages) {
+        this.currentPage++;
+        await this.getFromDb();
+      }
+    },
+
+    // 첫 페이지로 이동
+    async goToFirstPage() {
+      if (this.currentPage !== 1) {
+        this.currentPage = 1;
+        await this.getFromDb();
+      }
+    },
+
+    // 마지막 페이지로 이동
+    async goToLastPage() {
+      if (this.currentPage !== this.totalPages) {
+        this.currentPage = this.totalPages;
+        await this.getFromDb();
+      }
+    },
+
+    // 표시할 페이지 번호들 계산
+    getVisiblePages() {
+      const pages = [];
+      const maxVisible = 5; // 최대 5개 페이지 번호 표시
+      
+      if (this.totalPages <= maxVisible) {
+        // 전체 페이지가 5개 이하면 모두 표시
+        for (let i = 1; i <= this.totalPages; i++) {
+          pages.push(i);
+        }
+      } else {
+        // 현재 페이지 기준으로 앞뒤 2개씩 표시
+        let start = Math.max(1, this.currentPage - 2);
+        let end = Math.min(this.totalPages, this.currentPage + 2);
+        
+        // 시작과 끝 조정
+        if (end - start < 4) {
+          if (start === 1) {
+            end = Math.min(this.totalPages, start + 4);
+          } else {
+            start = Math.max(1, end - 4);
+          }
+        }
+        
+        for (let i = start; i <= end; i++) {
+          pages.push(i);
+        }
+      }
+      
+      return pages;
     },
 
     // 회원가입 처리
@@ -566,6 +681,68 @@ li {
 .pagination button:disabled {
   background-color: #ccc;
   cursor: not-allowed;
+}
+
+.pagination-info {
+  margin: 10px 0;
+  padding: 10px;
+  background-color: #f8f9fa;
+  border-radius: 5px;
+  text-align: center;
+  font-size: 14px;
+  color: #6c757d;
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 5px;
+  margin: 15px 0;
+}
+
+.page-btn {
+  background-color: #007bff;
+  color: white;
+  border: none;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.page-btn:hover:not(:disabled) {
+  background-color: #0056b3;
+}
+
+.page-numbers {
+  display: flex;
+  gap: 3px;
+}
+
+.page-number {
+  background-color: #f8f9fa;
+  color: #495057;
+  border: 1px solid #dee2e6;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  min-width: 40px;
+}
+
+.page-number:hover:not(:disabled) {
+  background-color: #e9ecef;
+}
+
+.page-number.active {
+  background-color: #007bff;
+  color: white;
+  border-color: #007bff;
+}
+
+.page-number.active:hover {
+  background-color: #0056b3;
 }
 
 .loading-spinner {

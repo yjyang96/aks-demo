@@ -177,10 +177,30 @@ def save_to_db():
 def get_from_db():
     try:
         user_id = session['user_id']
+        
+        # 페이지네이션 파라미터 처리
+        page = request.args.get('page', 1, type=int)
+        limit = request.args.get('limit', 20, type=int)
+        
+        # 파라미터 유효성 검사
+        if page < 1:
+            page = 1
+        if limit < 1 or limit > 100:
+            limit = 20
+        
+        # offset 계산
+        offset = (page - 1) * limit
+        
         db = get_db_connection()
         cursor = db.cursor(dictionary=True)
-        # 자기 메시지만 조회하도록 WHERE 조건 추가
-        cursor.execute("SELECT * FROM messages WHERE user_id = %s ORDER BY id DESC", (user_id,))
+        
+        # 전체 메시지 수 조회
+        cursor.execute("SELECT COUNT(*) as total FROM messages WHERE user_id = %s", (user_id,))
+        total_count = cursor.fetchone()['total']
+        
+        # 페이지네이션된 메시지 조회
+        cursor.execute("SELECT * FROM messages WHERE user_id = %s ORDER BY id DESC LIMIT %s OFFSET %s", 
+                      (user_id, limit, offset))
         messages = cursor.fetchall()
         cursor.close()
         db.close()
@@ -188,7 +208,18 @@ def get_from_db():
         # 비동기 로깅으로 변경
         async_log_api_stats('/db/messages', 'GET', 'success', user_id)
         
-        return jsonify(messages)
+        # 페이지네이션 정보와 함께 반환
+        return jsonify({
+            "messages": messages,
+            "pagination": {
+                "offset": offset,
+                "limit": limit,
+                "total": total_count,
+                "has_more": offset + limit < total_count,
+                "current_page": (offset // limit) + 1,
+                "total_pages": (total_count + limit - 1) // limit
+            }
+        })
     except Exception as e:
         if 'user_id' in session:
             async_log_api_stats('/db/messages', 'GET', 'error', session['user_id'])
