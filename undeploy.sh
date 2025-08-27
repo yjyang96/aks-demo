@@ -1,38 +1,51 @@
 #!/bin/bash
 
-echo "🚀 배포 삭제를 시작합니다..."
+set -euo pipefail
 
-# .env 파일 로드
-if [ -f .env ]; then
-    export $(cat .env | grep -v '^#' | xargs)
-    echo ".env 파일을 로드했습니다."
+echo "🚀 언디플로이(삭제)를 시작합니다..."
+
+# 사용법: ./undeploy.sh [ENV]
+# - ENV: env/.env.${ENV} 로드 (기본값: rancher)
+
+ENV=${1:-rancher}
+
+# 환경별 .env 파일 로드
+if [ -f "env/.env.${ENV}" ]; then
+    export $(grep -v '^#' env/.env.${ENV} | xargs)
+    echo "Using environment: ${ENV}"
 else
-    echo ".env 파일이 없습니다. env.example을 복사해서 .env 파일을 만드세요."
+    echo "Environment file not found: env/.env.${ENV}"
     exit 1
 fi
 
-echo "📦 Kubernetes 리소스 삭제 중..."
+echo "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "┃ 1) Helm 릴리스 삭제 (MariaDB / Kafka / Redis)"
+echo "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+helm uninstall "${MYSQL_HOST}" -n "${K8S_NAMESPACE}" || true
+helm uninstall "${KAFKA_SERVERS}" -n "${K8S_NAMESPACE}" || true
+helm uninstall "${REDIS_HOST}" -n "${K8S_NAMESPACE}" || true
 
-# Deployment 삭제
-echo "🗑️  Deployment 삭제 중..."
-kubectl delete deployment backend -n ${K8S_NAMESPACE} --ignore-not-found=true
-kubectl delete deployment frontend -n ${K8S_NAMESPACE} --ignore-not-found=true
+echo "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "┃ 2) 앱 리소스 삭제 (Secret / Deployment / Service)"
+echo "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-# Service 삭제
-echo "🗑️  Service 삭제 중..."
-kubectl delete service backend-service -n ${K8S_NAMESPACE} --ignore-not-found=true
-kubectl delete service frontend-service -n ${K8S_NAMESPACE} --ignore-not-found=true
+# 이미지 이름 구성 (deploy-with-env.sh와 동일 로직)
+if [ "${ENV}" = "rancher" ]; then
+  export BACKEND_IMAGE="${ACR_REPO_NAME_BACKEND}:latest"
+  export FRONTEND_IMAGE="${ACR_REPO_NAME_FRONTEND}:latest"
+else
+  export BACKEND_IMAGE="${ACR_LOGIN_SERVER}/${ACR_REPO_NAME_BACKEND}:latest"
+  export FRONTEND_IMAGE="${ACR_LOGIN_SERVER}/${ACR_REPO_NAME_FRONTEND}:latest"
+fi
 
-# Secret 삭제 (선택사항 - 주석 해제하면 삭제됨)
-echo "🗑️  Secret 삭제 중..."
-kubectl delete secret backend-secrets -n ${K8S_NAMESPACE} --ignore-not-found=true
+# envsubst로 동일 매니페스트 경로 삭제 (apply의 역동작)
+set +e
+envsubst < k8s/frontend-deployment.yaml | kubectl delete -n "${K8S_NAMESPACE}" -f - --ignore-not-found=true
+envsubst < k8s/backend-deployment.yaml | kubectl delete -n "${K8S_NAMESPACE}" -f - --ignore-not-found=true
+envsubst < k8s/backend-secret.yaml | kubectl delete -n "${K8S_NAMESPACE}" -f - --ignore-not-found=true
+set -e
 
-# ConfigMap 삭제
-# echo "🗑️  ConfigMap 삭제 중..."
-# kubectl delete configmap app-config -n ${K8S_NAMESPACE} --ignore-not-found=true
+echo "📋 네임스페이스 내 잔여 리소스 확인"
+kubectl get all -n "${K8S_NAMESPACE}" | cat
 
-# Pod 확인
-echo "📋 남은 Pod 확인 중..."
-kubectl get pods -n ${K8S_NAMESPACE}
-
-echo "✅ 배포 삭제 완료!"
+echo "✅ 언디플로이 완료"

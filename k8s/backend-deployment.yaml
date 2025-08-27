@@ -13,35 +13,35 @@ spec:
       labels:
         app: backend
     spec:
-      imagePullSecrets:
-      - name: acr-registry
+      # imagePullSecrets:
+      # - name: acr-registry
       containers:
       - name: backend
-        image: ${ACR_LOGIN_SERVER}/${ACR_REPO_NAME_BACKEND}:latest
-        # imagePullPolicy: Never
+        image: ${BACKEND_IMAGE}
+        imagePullPolicy: Never
         ports:
         - containerPort: 5000
         env:
         - name: MYSQL_HOST
-          value: "yejun-mariadb"
+          value: "${MYSQL_HOST}"
         - name: MYSQL_USER
-          value: "root"
+          value: "${MYSQL_USER}"
         - name: MYSQL_PASSWORD
           valueFrom:
             secretKeyRef:
               name: backend-secrets
               key: MYSQL_PASSWORD
         - name: REDIS_HOST
-          value: "redis-master.default"
+          value: "${REDIS_HOST}-master"
         - name: KAFKA_SERVERS
-          value: "my-kafka.default:9092"
+          value: "${KAFKA_SERVERS}:9092"
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
               name: backend-secrets
               key: REDIS_PASSWORD
         - name: KAFKA_USERNAME
-          value: "user1"
+          value: "${KAFKA_USERNAME}"
         - name: KAFKA_PASSWORD
           valueFrom:
             secretKeyRef:

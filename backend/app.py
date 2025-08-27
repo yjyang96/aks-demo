@@ -23,7 +23,7 @@ def get_db_connection():
         host=os.getenv('MYSQL_HOST', 'my-mariadb'),
         user=os.getenv('MYSQL_USER', 'testuser'),
         password=os.getenv('MYSQL_PASSWORD'),
-        database="testdb",
+        database="yejun-db",
         connect_timeout=30
     )
 
@@ -39,14 +39,25 @@ def get_redis_connection():
 
 # Kafka Producer 설정
 def get_kafka_producer():
-    return KafkaProducer(
-        bootstrap_servers=os.getenv('KAFKA_SERVERS', 'my-kafka:9092'),
-        value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-        security_protocol='SASL_PLAINTEXT',
-        sasl_mechanism='PLAIN',
-        sasl_plain_username=os.getenv('KAFKA_USERNAME', 'user1'),
-        sasl_plain_password=os.getenv('KAFKA_PASSWORD', '')
-    )
+    kafka_servers = os.getenv('KAFKA_SERVERS', 'my-kafka:9092')
+    kafka_username = os.getenv('KAFKA_USERNAME', 'user1')
+    kafka_password = os.getenv('KAFKA_PASSWORD', '')
+
+    if kafka_password:
+        return KafkaProducer(
+            bootstrap_servers=kafka_servers,
+            value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+            security_protocol='SASL_PLAINTEXT',
+            sasl_mechanism='PLAIN',
+            sasl_plain_username=kafka_username,
+            sasl_plain_password=kafka_password
+        )
+    else:
+        return KafkaProducer(
+            bootstrap_servers=kafka_servers,
+            value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+            security_protocol='PLAINTEXT'
+        )
 
 # 로깅 함수
 def log_to_redis(action, details):
@@ -276,18 +287,33 @@ def search_messages():
 @login_required
 def get_kafka_logs():
     try:
-        consumer = KafkaConsumer(
-            'api-logs',
-            bootstrap_servers=os.getenv('KAFKA_SERVERS', 'my-kafka:9092'),
-            value_deserializer=lambda m: json.loads(m.decode('utf-8')),
-            security_protocol='SASL_PLAINTEXT',
-            sasl_mechanism='PLAIN',
-            sasl_plain_username=os.getenv('KAFKA_USERNAME', 'user1'),
-            sasl_plain_password=os.getenv('KAFKA_PASSWORD', ''),
-            group_id='api-logs-viewer',
-            auto_offset_reset='earliest',
-            consumer_timeout_ms=5000
-        )
+        kafka_servers = os.getenv('KAFKA_SERVERS', 'my-kafka:9092')
+        kafka_username = os.getenv('KAFKA_USERNAME', 'user1')
+        kafka_password = os.getenv('KAFKA_PASSWORD', '')
+
+        if kafka_password:
+            consumer = KafkaConsumer(
+                'api-logs',
+                bootstrap_servers=kafka_servers,
+                value_deserializer=lambda m: json.loads(m.decode('utf-8')),
+                security_protocol='SASL_PLAINTEXT',
+                sasl_mechanism='PLAIN',
+                sasl_plain_username=kafka_username,
+                sasl_plain_password=kafka_password,
+                group_id='api-logs-viewer',
+                auto_offset_reset='earliest',
+                consumer_timeout_ms=5000
+            )
+        else:
+            consumer = KafkaConsumer(
+                'api-logs',
+                bootstrap_servers=kafka_servers,
+                value_deserializer=lambda m: json.loads(m.decode('utf-8')),
+                security_protocol='PLAINTEXT',
+                group_id='api-logs-viewer',
+                auto_offset_reset='earliest',
+                consumer_timeout_ms=5000
+            )
         
         logs = []
         try:

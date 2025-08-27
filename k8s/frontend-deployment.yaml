@@ -13,12 +13,12 @@ spec:
       labels:
         app: frontend
     spec:
-      imagePullSecrets:
-      - name: acr-registry
+      # imagePullSecrets:
+      # - name: acr-registry
       containers:
       - name: frontend
-        image: ${ACR_LOGIN_SERVER}/${ACR_REPO_NAME_FRONTEND}:latest
-        # imagePullPolicy: Never
+        image: ${FRONTEND_IMAGE}
+        imagePullPolicy: Never
         ports:
         - containerPort: 80
 ---
