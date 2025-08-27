@@ -32,15 +32,17 @@
           <h2>MariaDB 메시지 관리</h2>
           <input v-model="dbMessage" placeholder="저장할 메시지 입력">
           <button @click="saveToDb">DB에 저장</button>
-          <button @click="getFromDb">DB에서 조회</button>
+          <button @click="getFromDb">내 메시지 조회</button>
           <button @click="insertSampleData" class="sample-btn">샘플 데이터 저장</button>
           <div v-if="loading" class="loading-spinner">
             <p>데이터를 불러오는 중...</p>
           </div>
           <div v-if="dbData.length && !loading">
-            <h3>저장된 메시지:</h3>
+            <h3>내 메시지:</h3>
             <ul>
-              <li v-for="item in dbData" :key="item.id">{{ item.message }} ({{ formatDate(item.created_at) }})</li>
+              <li v-for="item in dbData" :key="item.id">
+                {{ item.message }} ({{ formatDate(item.created_at) }}) - {{ item.user_id }}
+              </li>
             </ul>
           </div>
         </div>
@@ -299,7 +301,7 @@ export default {
     async getAllMessages() {
       try {
         this.loading = true;
-        const response = await axios.get(`${API_BASE_URL}/db/messages`);
+        const response = await axios.get(`${API_BASE_URL}/db/messages/all`);
         this.searchResults = response.data;
       } catch (error) {
         console.error('전체 메시지 로드 실패:', error);

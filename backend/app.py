@@ -121,14 +121,14 @@ def save_to_db():
         db = get_db_connection()
         data = request.json
         cursor = db.cursor()
-        sql = "INSERT INTO messages (message, created_at) VALUES (%s, %s)"
-        cursor.execute(sql, (data['message'], datetime.now()))
+        sql = "INSERT INTO messages (message, created_at, user_id) VALUES (%s, %s, %s)"
+        cursor.execute(sql, (data['message'], datetime.now(), user_id))
         db.commit()
         cursor.close()
         db.close()
         
         # 로깅
-        log_to_redis('db_insert', f"Message saved: {data['message'][:30]}...")
+        log_to_redis('db_insert', f"Message saved: {data['message'][:30]}... by {user_id}")
         
         async_log_api_stats('/db/message', 'POST', 'success', user_id)
         return jsonify({"status": "success"})
@@ -144,7 +144,8 @@ def get_from_db():
         user_id = session['user_id']
         db = get_db_connection()
         cursor = db.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM messages ORDER BY created_at DESC")
+        # 자기 메시지만 조회하도록 WHERE 조건 추가
+        cursor.execute("SELECT * FROM messages WHERE user_id = %s ORDER BY id DESC", (user_id,))
         messages = cursor.fetchall()
         cursor.close()
         db.close()
@@ -261,6 +262,28 @@ def logout():
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+# 전체 메시지 조회 (모든 사용자의 메시지)
+@app.route('/db/messages/all', methods=['GET'])
+@login_required
+def get_all_messages():
+    try:
+        user_id = session['user_id']
+        db = get_db_connection()
+        cursor = db.cursor(dictionary=True)
+        cursor.execute("SELECT * FROM messages ORDER BY id DESC")
+        messages = cursor.fetchall()
+        cursor.close()
+        db.close()
+        
+        # 비동기 로깅으로 변경
+        async_log_api_stats('/db/messages/all', 'GET', 'success', user_id)
+        
+        return jsonify(messages)
+    except Exception as e:
+        if 'user_id' in session:
+            async_log_api_stats('/db/messages/all', 'GET', 'error', session['user_id'])
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 # 메시지 검색 (DB에서 검색)
 @app.route('/db/messages/search', methods=['GET'])
 @login_required
@@ -272,7 +295,7 @@ def search_messages():
         # DB에서 검색
         db = get_db_connection()
         cursor = db.cursor(dictionary=True)
-        sql = "SELECT * FROM messages WHERE message LIKE %s ORDER BY created_at DESC"
+        sql = "SELECT * FROM messages WHERE message LIKE %s ORDER BY id DESC"
         cursor.execute(sql, (f"%{query}%",))
         results = cursor.fetchall()
         cursor.close()
