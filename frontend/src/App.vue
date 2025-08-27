@@ -100,7 +100,54 @@
             <input v-model="searchQuery" placeholder="메시지 검색">
             <button @click="searchMessages">검색</button>
             <button @click="getAllMessages" class="view-all-btn">전체 메시지 보기</button>
+            <button @click="toggleCacheManager" class="cache-btn">캐시 관리</button>
           </div>
+          
+          <!-- 캐시 관리 모달 -->
+          <div v-if="showCacheManager" class="cache-modal">
+            <div class="cache-modal-content">
+              <h3>검색 캐시 관리</h3>
+              
+              <div class="cache-stats">
+                <h4>전체 캐시 통계</h4>
+                <div v-if="cacheStatsLoading" class="loading-spinner">
+                  <p>캐시 통계를 불러오는 중...</p>
+                </div>
+                <div v-else>
+                  <p><strong>캐시된 쿼리 수:</strong> {{ cacheStats.total_cached_queries || 0 }}</p>
+                  <p><strong>총 히트 수:</strong> {{ cacheStats.total_hits || 0 }}</p>
+                  <p><strong>캐시 만료 시간:</strong> 1분</p>
+                  <button @click="loadCacheStats" class="refresh-btn">새로고침</button>
+                </div>
+              </div>
+              
+              <div class="cache-list" v-if="!cacheStatsLoading && cacheStats.cache_stats && cacheStats.cache_stats.length > 0">
+                <h4>캐시된 쿼리 목록</h4>
+                <div v-for="cache in cacheStats.cache_stats" :key="cache.query" class="cache-item">
+                  <div class="cache-details">
+                    <div class="cache-query"><strong>{{ cache.query }}</strong></div>
+                    <div class="cache-info">
+                      히트: {{ cache.hit_count }} | 결과: {{ cache.results_count }}개 | 
+                      생성: {{ formatDate(cache.timestamp) }}
+                    </div>
+                  </div>
+                  <div class="cache-actions">
+                    <button @click="clearCache(cache.query)" class="clear-cache-btn">삭제</button>
+                  </div>
+                </div>
+              </div>
+              <div v-else-if="!cacheStatsLoading && (!cacheStats.cache_stats || cacheStats.cache_stats.length === 0)" class="no-cache">
+                <p>캐시된 쿼리가 없습니다.</p>
+              </div>
+              
+              <div class="cache-actions-bulk">
+                <button @click="clearAllCache" class="clear-all-btn">전체 캐시 삭제</button>
+              </div>
+              
+              <button @click="showCacheManager = false" class="close-btn">닫기</button>
+            </div>
+          </div>
+          
           <div v-if="searchResults.length > 0" class="search-results">
             <h3>검색 결과:</h3>
             <table>
@@ -167,7 +214,11 @@ export default {
       searchResults: [],
       kafkaLogs: [],
       kafkaLogsLoading: false,
-      kafkaLogsError: null
+      kafkaLogsError: null,
+      // 캐시 관리 관련
+      showCacheManager: false,
+      cacheStats: {},
+      cacheStatsLoading: false
     }
   },
   async mounted() {
@@ -329,6 +380,65 @@ export default {
         alert('검색에 실패했습니다.');
       } finally {
         this.loading = false;
+      }
+    },
+
+    // 캐시 관리 모달 토글
+    async toggleCacheManager() {
+      this.showCacheManager = !this.showCacheManager;
+      if (this.showCacheManager) {
+        // 모달이 열릴 때 캐시 통계 로드
+        await this.loadCacheStats();
+      }
+    },
+
+    // 캐시 통계 로드
+    async loadCacheStats() {
+      try {
+        this.cacheStatsLoading = true;
+        const response = await axios.get(`${API_BASE_URL}/cache/search/stats`);
+        this.cacheStats = response.data;
+      } catch (error) {
+        console.error('캐시 통계 로드 실패:', error);
+        alert('캐시 통계를 불러오는데 실패했습니다.');
+      } finally {
+        this.cacheStatsLoading = false;
+      }
+    },
+
+    // 특정 캐시 삭제
+    async clearCache(query) {
+      if (!confirm(`쿼리 '${query}'의 캐시를 삭제하시겠습니까?`)) {
+        return;
+      }
+      
+      try {
+        const response = await axios.post(`${API_BASE_URL}/cache/search/clear`, {
+          query: query
+        });
+        alert(response.data.message);
+        // 통계 즉시 새로고침
+        await this.loadCacheStats();
+      } catch (error) {
+        console.error('캐시 삭제 실패:', error);
+        alert('캐시 삭제에 실패했습니다.');
+      }
+    },
+
+    // 모든 캐시 삭제
+    async clearAllCache() {
+      if (!confirm('전체 검색 캐시를 삭제하시겠습니까?')) {
+        return;
+      }
+      
+      try {
+        const response = await axios.post(`${API_BASE_URL}/cache/search/clear`, {});
+        alert(response.data.message);
+        // 통계 즉시 새로고침
+        await this.loadCacheStats();
+      } catch (error) {
+        console.error('캐시 삭제 실패:', error);
+        alert('캐시 삭제에 실패했습니다.');
       }
     },
 
@@ -609,6 +719,138 @@ li {
   border: 1px solid #f5c6cb;
   border-radius: 5px;
   color: #721c24;
+}
+
+/* 캐시 관리 버튼 */
+.cache-btn {
+  background-color: #ffc107;
+  color: #212529;
+}
+
+.cache-btn:hover {
+  background-color: #e0a800;
+}
+
+/* 캐시 관리 모달 */
+.cache-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.cache-modal-content {
+  background-color: white;
+  padding: 30px;
+  border-radius: 10px;
+  max-width: 700px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.cache-modal h3 {
+  margin-top: 0;
+  margin-bottom: 20px;
+  color: #333;
+}
+
+.cache-stats {
+  background-color: #f8f9fa;
+  padding: 15px;
+  border-radius: 5px;
+  margin-bottom: 20px;
+}
+
+.cache-stats h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  color: #333;
+}
+
+.cache-stats p {
+  margin: 5px 0;
+  font-size: 14px;
+}
+
+.refresh-btn {
+  background-color: #17a2b8;
+  margin-top: 10px;
+}
+
+.refresh-btn:hover {
+  background-color: #138496;
+}
+
+.cache-list h4 {
+  margin-bottom: 15px;
+  color: #333;
+}
+
+.cache-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  border: 1px solid #dee2e6;
+  border-radius: 5px;
+  margin-bottom: 10px;
+  background-color: #fff;
+}
+
+.cache-details {
+  flex: 1;
+}
+
+.cache-query {
+  margin-bottom: 5px;
+  color: #495057;
+}
+
+.cache-info {
+  font-size: 12px;
+  color: #6c757d;
+}
+
+.cache-actions {
+  margin-left: 15px;
+}
+
+.clear-cache-btn {
+  background-color: #dc3545;
+  font-size: 12px;
+  padding: 5px 10px;
+}
+
+.clear-cache-btn:hover {
+  background-color: #c82333;
+}
+
+.cache-actions-bulk {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.clear-all-btn {
+  background-color: #dc3545;
+  padding: 10px 20px;
+}
+
+.clear-all-btn:hover {
+  background-color: #c82333;
+}
+
+.no-cache {
+  text-align: center;
+  padding: 20px;
+  color: #6c757d;
+  font-style: italic;
 }
 
 /* 로딩 컨테이너 */

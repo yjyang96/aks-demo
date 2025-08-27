@@ -5,3 +5,7 @@ auth:
   password: "${REDIS_PASSWORD}"
 
 architecture: standalone
+
+master:
+  persistence:
+    enabled: false

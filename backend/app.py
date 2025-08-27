@@ -32,6 +32,13 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF 보호
 # Flask-Session 초기화
 Session(app)
 
+# datetime 객체를 JSON 직렬화 가능한 형태로 변환하는 함수
+def serialize_datetime(obj):
+    if isinstance(obj, datetime):
+        # 원래 형식과 동일하게 변환 (예: "Wed, 27 Aug 2025 19:14:30 GMT")
+        return obj.strftime("%a, %d %b %Y %H:%M:%S GMT")
+    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
 # 세션 활동 시간 업데이트 미들웨어
 @app.before_request
 def update_session_activity():
@@ -334,15 +341,44 @@ def get_all_messages():
             async_log_api_stats('/db/messages/all', 'GET', 'error', session['user_id'])
         return jsonify({"status": "error", "message": str(e)}), 500
 
-# 메시지 검색 (DB에서 검색)
+# 메시지 검색 (DB에서 검색 + Redis 캐시)
 @app.route('/db/messages/search', methods=['GET'])
 @login_required
 def search_messages():
     try:
-        query = request.args.get('q', '')
+        query = request.args.get('q', '').strip()
         user_id = session['user_id']
         
-        # DB에서 검색
+        if not query:
+            return jsonify([])
+        
+        # 캐시 키 생성 (쿼리 해시만 사용)
+        query_hash = hashlib.md5(query.encode()).hexdigest()[:12]
+        cache_key = f"search:{query_hash}"
+        
+        # Redis에서 캐시 확인
+        try:
+            redis_client = get_redis_connection()
+            cached_data = redis_client.get(cache_key)
+            
+            if cached_data:
+                cache_info = json.loads(cached_data)
+                # 캐시 히트 카운트 증가
+                cache_info['hit_count'] += 1
+                redis_client.set(cache_key, json.dumps(cache_info, default=serialize_datetime))
+                redis_client.expire(cache_key, 60)  # 1분 만료
+                redis_client.close()
+                
+                print(f"Cache HIT for query: {query} (hits: {cache_info['hit_count']})")
+                async_log_api_stats('/db/messages/search', 'GET', 'cache_hit', user_id)
+                return jsonify(cache_info['results'])
+            
+            redis_client.close()
+        except Exception as redis_error:
+            print(f"Redis cache error: {str(redis_error)}")
+        
+        # 캐시 미스 - DB에서 검색
+        print(f"Cache MISS for query: {query}")
         db = get_db_connection()
         cursor = db.cursor(dictionary=True)
         sql = "SELECT * FROM messages WHERE message LIKE %s ORDER BY id DESC"
@@ -350,6 +386,23 @@ def search_messages():
         results = cursor.fetchall()
         cursor.close()
         db.close()
+        
+        # 검색 결과를 캐시에 저장
+        try:
+            redis_client = get_redis_connection()
+            cache_data = {
+                "query": query,
+                "results": results,
+                "timestamp": datetime.now().isoformat(),
+                "expires_at": (datetime.now() + timedelta(minutes=1)).isoformat(),
+                "hit_count": 1
+            }
+            redis_client.set(cache_key, json.dumps(cache_data, default=serialize_datetime))
+            redis_client.expire(cache_key, 60)  # 1분 만료
+            redis_client.close()
+            print(f"Cache STORED for query: {query}")
+        except Exception as redis_error:
+            print(f"Redis cache store error: {str(redis_error)}")
         
         # 검색 이력을 Kafka에 저장
         async_log_api_stats('/db/messages/search', 'GET', 'success', user_id)
@@ -415,6 +468,98 @@ def get_kafka_logs():
         return jsonify(logs)
     except Exception as e:
         print(f"Kafka log retrieval error: {str(e)}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# 검색 캐시 통계 조회
+@app.route('/cache/search/stats', methods=['GET'])
+@login_required
+def get_search_cache_stats():
+    try:
+        try:
+            redis_client = get_redis_connection()
+            
+            # 모든 검색 캐시 키 조회
+            cache_pattern = f"search:*"
+            cache_keys = redis_client.keys(cache_pattern)
+            
+            cache_stats = []
+            total_hits = 0
+            
+            for key in cache_keys:
+                try:
+                    cached_data = redis_client.get(key)
+                    if cached_data:
+                        cache_info = json.loads(cached_data)
+                        cache_stats.append({
+                            'query': cache_info['query'],
+                            'hit_count': cache_info['hit_count'],
+                            'timestamp': cache_info['timestamp'],
+                            'expires_at': cache_info['expires_at'],
+                            'results_count': len(cache_info['results'])
+                        })
+                        total_hits += cache_info['hit_count']
+                except Exception as e:
+                    print(f"Error parsing cache data for key {key}: {str(e)}")
+                    continue
+            
+            redis_client.close()
+            
+            return jsonify({
+                "status": "success",
+                "total_cached_queries": len(cache_stats),
+                "total_hits": total_hits,
+                "cache_stats": cache_stats
+            })
+            
+        except Exception as redis_error:
+            print(f"Redis cache stats error: {str(redis_error)}")
+            return jsonify({"status": "error", "message": "캐시 통계 조회 중 오류가 발생했습니다"}), 500
+            
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
+# 검색 캐시 삭제
+@app.route('/cache/search/clear', methods=['POST'])
+@login_required
+def clear_search_cache():
+    try:
+        data = request.json
+        query = data.get('query', '').strip() if data else ''
+        
+        try:
+            redis_client = get_redis_connection()
+            
+            if query:
+                # 특정 쿼리 캐시만 삭제
+                query_hash = hashlib.md5(query.encode()).hexdigest()[:12]
+                cache_key = f"search:{query_hash}"
+                deleted_count = redis_client.delete(cache_key)
+                
+                message = f"쿼리 '{query}'의 캐시가 삭제되었습니다." if deleted_count > 0 else f"쿼리 '{query}'의 캐시를 찾을 수 없습니다."
+            else:
+                # 모든 검색 캐시 삭제
+                cache_pattern = f"search:*"
+                cache_keys = redis_client.keys(cache_pattern)
+                deleted_count = 0
+                
+                for key in cache_keys:
+                    deleted_count += redis_client.delete(key)
+                
+                message = f"{deleted_count}개의 검색 캐시가 삭제되었습니다."
+            
+            redis_client.close()
+            
+            return jsonify({
+                "status": "success",
+                "message": message,
+                "deleted_count": deleted_count
+            })
+            
+        except Exception as redis_error:
+            print(f"Redis cache clear error: {str(redis_error)}")
+            return jsonify({"status": "error", "message": "캐시 삭제 중 오류가 발생했습니다"}), 500
+            
+    except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
 if __name__ == '__main__':

@@ -20,3 +20,12 @@ listeners:
 
 # 보안 프로토콜 맵 설정
 listenerSecurityProtocolMap: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT
+
+# 영속성 비활성화
+controller:
+  persistence:
+    enabled: false
+
+broker:
+  persistence:
+    enabled: false
