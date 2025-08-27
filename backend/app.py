@@ -1,18 +1,46 @@
 from flask import Flask, request, jsonify, session
 from flask_cors import CORS
+from flask_session import Session
 import redis
 import mysql.connector
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
 from kafka import KafkaProducer, KafkaConsumer
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 from threading import Thread
+import hashlib
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True)  # 세션을 위한 credentials 지원
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'your-secret-key-here')  # 세션을 위한 시크릿 키
+
+# Flask-Session 설정
+app.config['SESSION_TYPE'] = 'redis'
+app.config['SESSION_REDIS'] = redis.Redis(
+    host=os.getenv('REDIS_HOST', 'my-redis-master'),
+    port=6379,
+    password=os.getenv('REDIS_PASSWORD'),
+    db=1  # 세션용 별도 DB 사용
+)
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=1)  # 세션 만료 시간을 1시간으로 설정
+app.config['SESSION_COOKIE_SECURE'] = False  # 개발 환경에서는 False, 프로덕션에서는 True
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'  # CSRF 보호
+
+# Flask-Session 초기화
+Session(app)
+
+# 세션 활동 시간 업데이트 미들웨어
+@app.before_request
+def update_session_activity():
+    """요청마다 세션 활동 시간을 업데이트합니다."""
+    if 'user_id' in session:
+        # Flask-Session이 자동으로 세션을 Redis에 저장하므로
+        # 단순히 last_activity만 업데이트
+        session['last_activity'] = datetime.now().isoformat()
+        session.modified = True  # 세션 변경사항을 Redis에 저장
 
 # # 스레드 풀 생성
 # thread_pool = ThreadPoolExecutor(max_workers=5)
@@ -137,7 +165,7 @@ def save_to_db():
         log_to_redis('db_insert_error', str(e))
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route('/db/messages', methods=['GET'])
+@app.route('/db/message', methods=['GET'])
 @login_required
 def get_from_db():
     try:
@@ -222,20 +250,17 @@ def login():
         db.close()
         
         if user and check_password_hash(user['password'], password):
-            session['user_id'] = username  # 세션에 사용자 정보 저장
+            # 세션을 영구적으로 설정
+            session.permanent = True
+            session['user_id'] = username
+            session['login_time'] = datetime.now().isoformat()
+            session['last_activity'] = datetime.now().isoformat()
+            session['user_agent'] = request.headers.get('User-Agent', '')
+            session['remote_addr'] = request.remote_addr or 'unknown'
+            session['browser_id'] = hashlib.md5(f"{request.headers.get('User-Agent', '')}:{request.remote_addr or 'unknown'}".encode()).hexdigest()[:12]
             
-            # Redis 세션 저장 (선택적)
-            try:
-                redis_client = get_redis_connection()
-                session_data = {
-                    'user_id': username,
-                    'login_time': datetime.now().isoformat()
-                }
-                redis_client.set(f"session:{username}", json.dumps(session_data))
-                redis_client.expire(f"session:{username}", 3600)
-            except Exception as redis_error:
-                print(f"Redis session error: {str(redis_error)}")
-                # Redis 오류는 무시하고 계속 진행
+            # Flask-Session이 자동으로 Redis에 저장
+            session.modified = True
             
             return jsonify({
                 "status": "success", 
@@ -249,21 +274,46 @@ def login():
         print(f"Login error: {str(e)}")  # 서버 로그에 에러 출력
         return jsonify({"status": "error", "message": "로그인 처리 중 오류가 발생했습니다"}), 500
 
+# 세션 상태 확인 엔드포인트
+@app.route('/session/status', methods=['GET'])
+def session_status():
+    try:
+        if 'user_id' in session:
+            return jsonify({
+                "status": "success",
+                "logged_in": True,
+                "username": session['user_id'],
+                "session_permanent": session.permanent,
+                "browser_id": session.get('browser_id'),
+                "user_agent": session.get('user_agent'),
+                "login_time": session.get('login_time'),
+                "last_activity": session.get('last_activity')
+            })
+        else:
+            return jsonify({
+                "status": "success",
+                "logged_in": False,
+                "username": None
+            })
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 # 로그아웃 엔드포인트
 @app.route('/logout', methods=['POST'])
 def logout():
     try:
-        if 'user_id' in session:
-            username = session['user_id']
-            redis_client = get_redis_connection()
-            redis_client.delete(f"session:{username}")
-            session.pop('user_id', None)
+        # Flask-Session이 자동으로 세션을 삭제
+        session.clear()
+        session.permanent = False
+        
         return jsonify({"status": "success", "message": "로그아웃 성공"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
+
+
 # 전체 메시지 조회 (모든 사용자의 메시지)
-@app.route('/db/messages/all', methods=['GET'])
+@app.route('/db/messages', methods=['GET'])
 @login_required
 def get_all_messages():
     try:

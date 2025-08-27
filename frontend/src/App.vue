@@ -2,8 +2,15 @@
   <div id="app">
     <h1>K8s 마이크로서비스 데모</h1>
     
+    <!-- 로딩 상태 -->
+    <div v-if="isLoading" class="loading-container">
+      <div class="loading-spinner">
+        <p>세션 상태를 확인하는 중...</p>
+      </div>
+    </div>
+    
     <!-- 로그인/회원가입 섹션 -->
-    <div class="section" v-if="!isLoggedIn">
+    <div class="section" v-else-if="!isLoggedIn">
       <div v-if="!showRegister">
         <h2>로그인</h2>
         <input v-model="username" placeholder="사용자명">
@@ -127,6 +134,9 @@ import axios from 'axios';
 // nginx 프록시를 통해 요청하도록 수정
 const API_BASE_URL = '/api';
 
+// axios 기본 설정 - 쿠키 자동 전송
+axios.defaults.withCredentials = true;
+
 export default {
   name: 'App',
   data() {
@@ -134,6 +144,7 @@ export default {
       username: '',
       password: '',
       isLoggedIn: false,
+      isLoading: true, // 초기 로딩 상태
       searchQuery: '',
       dbMessage: '',
       dbData: [],
@@ -159,9 +170,30 @@ export default {
       kafkaLogsError: null
     }
   },
+  async mounted() {
+    // 페이지 로드 시 세션 상태 확인
+    await this.checkSessionStatus();
+  },
   methods: {
+    // 세션 상태 확인
+    async checkSessionStatus() {
+      try {
+        const response = await axios.get(`${API_BASE_URL}/session/status`);
+        if (response.data.logged_in) {
+          this.isLoggedIn = true;
+          this.currentUser = response.data.username;
+        }
+      } catch (error) {
+        console.log('세션 상태 확인 실패:', error);
+        // 세션이 없거나 오류가 발생한 경우 로그인 페이지 표시
+      } finally {
+        this.isLoading = false;
+      }
+    },
+
     // 날짜를 사용자 친화적인 형식으로 변환
     formatDate(dateString) {
+      if (!dateString) return '알 수 없음';
       const date = new Date(dateString);
       return date.toLocaleString();
     },
@@ -184,7 +216,7 @@ export default {
     async getFromDb() {
       try {
         this.loading = true;
-        const response = await axios.get(`${API_BASE_URL}/db/messages?offset=${this.offset}&limit=${this.limit}`);
+        const response = await axios.get(`${API_BASE_URL}/db/message?offset=${this.offset}&limit=${this.limit}`);
         this.dbData = response.data;
         this.hasMore = response.data.length === this.limit;
       } catch (error) {
@@ -257,6 +289,9 @@ export default {
           this.currentUser = this.username;
           this.username = '';
           this.password = '';
+          
+          // 로그인 후 세션 정보 업데이트
+          await this.checkSessionStatus();
         } else {
           alert(response.data.message || '로그인에 실패했습니다.');
         }
@@ -301,7 +336,7 @@ export default {
     async getAllMessages() {
       try {
         this.loading = true;
-        const response = await axios.get(`${API_BASE_URL}/db/messages/all`);
+        const response = await axios.get(`${API_BASE_URL}/db/messages`);
         this.searchResults = response.data;
       } catch (error) {
         console.error('전체 메시지 로드 실패:', error);
@@ -575,4 +610,16 @@ li {
   border-radius: 5px;
   color: #721c24;
 }
+
+/* 로딩 컨테이너 */
+.loading-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  font-size: 18px;
+  color: #555;
+}
+
+
 </style> 
