@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: backend
-  namespace: default
+  namespace: ${K8S_NAMESPACE}
 spec:
   replicas: 1
   selector:
@@ -13,26 +13,28 @@ spec:
       labels:
         app: backend
     spec:
+      imagePullSecrets:
+      - name: acr-registry
       containers:
       - name: backend
-        image: giglepeople/aks-test-app-backend:latest
+        image: ${ACR_LOGIN_SERVER}/${ACR_REPO_NAME_BACKEND}:latest
         # imagePullPolicy: Never
         ports:
         - containerPort: 5000
         env:
         - name: MYSQL_HOST
-          value: "my-mariadb"
+          value: "yejun-mariadb"
         - name: MYSQL_USER
-          value: "testuser"
+          value: "root"
         - name: MYSQL_PASSWORD
           valueFrom:
             secretKeyRef:
               name: backend-secrets
               key: MYSQL_PASSWORD
         - name: REDIS_HOST
-          value: "redis-master"
+          value: "redis-master.default"
         - name: KAFKA_SERVERS
-          value: "my-kafka:9092"
+          value: "my-kafka.default:9092"
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
@@ -55,7 +57,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: backend-service
-  namespace: default
+  namespace: ${K8S_NAMESPACE}
 spec:
   type: ClusterIP
   selector:

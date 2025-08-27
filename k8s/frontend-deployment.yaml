@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: frontend
-  namespace: default
+  namespace: ${K8S_NAMESPACE}
 spec:
   replicas: 1
   selector:
@@ -13,9 +13,11 @@ spec:
       labels:
         app: frontend
     spec:
+      imagePullSecrets:
+      - name: acr-registry
       containers:
       - name: frontend
-        image: giglepeople/aks-test-app-frontend:latest
+        image: ${ACR_LOGIN_SERVER}/${ACR_REPO_NAME_FRONTEND}:latest
         # imagePullPolicy: Never
         ports:
         - containerPort: 80
@@ -24,7 +26,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: frontend-service
-  namespace: default
+  namespace: ${K8S_NAMESPACE}
 spec:
   type: NodePort
   selector:
@@ -32,4 +34,4 @@ spec:
   ports:
   - port: 80
     targetPort: 80
-    nodePort: 30080 
+    nodePort: 30081
