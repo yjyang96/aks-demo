@@ -59,6 +59,33 @@
         </div>
 
         <div class="section">
+          <h2>Kafka 로그</h2>
+          <button @click="getKafkaLogs" class="kafka-btn">Kafka 로그 조회</button>
+          <div v-if="kafkaLogsLoading" class="loading-spinner">
+            <p>Kafka 로그를 불러오는 중...</p>
+          </div>
+          <div v-if="kafkaLogs.length" class="kafka-logs">
+            <h3>Kafka API 로그:</h3>
+            <div class="kafka-log-container">
+              <div v-for="(log, index) in kafkaLogs" :key="index" class="kafka-log-item">
+                <div class="log-header">
+                  <span class="log-timestamp">{{ formatDate(log.timestamp) }}</span>
+                  <span class="log-status" :class="getStatusClass(log.status)">{{ log.status }}</span>
+                </div>
+                <div class="log-details">
+                  <div class="log-user"><strong>사용자:</strong> {{ log.user_id }}</div>
+                  <div class="log-endpoint"><strong>엔드포인트:</strong> {{ log.method }} {{ log.endpoint }}</div>
+                  <div class="log-message"><strong>메시지:</strong> {{ log.message }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div v-if="kafkaLogsError" class="error-message">
+            <p>❌ Kafka 로그 조회 실패: {{ kafkaLogsError }}</p>
+          </div>
+        </div>
+
+        <div class="section">
           <h2>메시지 검색</h2>
           <div class="search-section">
             <input v-model="searchQuery" placeholder="메시지 검색">
@@ -124,7 +151,10 @@ export default {
       registerPassword: '',
       confirmPassword: '',
       currentUser: null,
-      searchResults: []
+      searchResults: [],
+      kafkaLogs: [],
+      kafkaLogsLoading: false,
+      kafkaLogsError: null
     }
   },
   methods: {
@@ -184,6 +214,32 @@ export default {
       } catch (error) {
         console.error('Redis 로그 조회 실패:', error);
       }
+    },
+
+    // Kafka에 저장된 API 호출 로그 조회
+    async getKafkaLogs() {
+      try {
+        this.kafkaLogsLoading = true;
+        this.kafkaLogsError = null;
+        const response = await axios.get(`${API_BASE_URL}/logs/kafka`);
+        this.kafkaLogs = response.data;
+        console.log('Kafka 로그 조회 성공:', this.kafkaLogs);
+      } catch (error) {
+        console.error('Kafka 로그 조회 실패:', error);
+        this.kafkaLogsError = error.response && error.response.data && error.response.data.message 
+          ? error.response.data.message 
+          : 'Kafka 로그 조회에 실패했습니다.';
+      } finally {
+        this.kafkaLogsLoading = false;
+      }
+    },
+
+    // 상태에 따른 CSS 클래스 반환
+    getStatusClass(status) {
+      return {
+        'status-success': status === 'success',
+        'status-error': status === 'error'
+      };
     },
 
     // 사용자 로그인 처리
@@ -427,5 +483,94 @@ li {
 
 .view-all-btn:hover {
   background-color: #5a6268;
+}
+
+.kafka-btn {
+  background-color: #17a2b8;
+}
+
+.kafka-btn:hover {
+  background-color: #138496;
+}
+
+.kafka-logs {
+  margin-top: 20px;
+}
+
+.kafka-log-container {
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  padding: 10px;
+}
+
+.kafka-log-item {
+  margin-bottom: 15px;
+  padding: 10px;
+  border: 1px solid #eee;
+  border-radius: 5px;
+  background-color: #f8f9fa;
+}
+
+.log-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.log-timestamp {
+  font-size: 0.9em;
+  color: #6c757d;
+}
+
+.log-status {
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 0.8em;
+  font-weight: bold;
+}
+
+.status-success {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+.status-error {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+.log-details {
+  font-size: 0.9em;
+}
+
+.log-details > div {
+  margin-bottom: 3px;
+}
+
+.log-user {
+  color: #495057;
+}
+
+.log-endpoint {
+  color: #6c757d;
+}
+
+.log-message {
+  color: #495057;
+  font-style: italic;
+}
+
+.error-message {
+  margin-top: 10px;
+  padding: 10px;
+  background-color: #f8d7da;
+  border: 1px solid #f5c6cb;
+  border-radius: 5px;
+  color: #721c24;
 }
 </style> 

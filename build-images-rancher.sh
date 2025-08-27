@@ -37,11 +37,17 @@ fi
 BACKEND_IMAGE_NAME="${ACR_REPO_NAME_BACKEND}:${IMAGE_TAG}"
 FRONTEND_IMAGE_NAME="${ACR_REPO_NAME_FRONTEND}:${IMAGE_TAG}"
 
+# 기존 이미지 강제 삭제 (선택적)
+# echo "🧹 기존 이미지 정리 중..."
+# docker rmi "${BACKEND_IMAGE_NAME}" 2>/dev/null || true
+# docker rmi "${FRONTEND_IMAGE_NAME}" 2>/dev/null || true
+
 echo "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "┃ 1) Backend 이미지 빌드 → ${BACKEND_IMAGE_NAME} (${BUILD_PLATFORM})"
 echo "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 docker build \
   --platform "${BUILD_PLATFORM}" \
+  --no-cache \
   -t "${BACKEND_IMAGE_NAME}" \
   -f "${ROOT_DIR}/backend/Dockerfile" \
   "${ROOT_DIR}/backend"
@@ -51,6 +57,7 @@ echo "┃ 2) Frontend 이미지 빌드 → ${FRONTEND_IMAGE_NAME} (${BUILD_PLATF
 echo "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 docker build \
   --platform "${BUILD_PLATFORM}" \
+  --no-cache \
   -t "${FRONTEND_IMAGE_NAME}" \
   -f "${ROOT_DIR}/frontend/Dockerfile" \
   "${ROOT_DIR}/frontend"

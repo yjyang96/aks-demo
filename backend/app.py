@@ -39,7 +39,8 @@ def get_redis_connection():
 
 # Kafka Producer 설정
 def get_kafka_producer():
-    kafka_servers = os.getenv('KAFKA_SERVERS', 'my-kafka:9092')
+    kafka_servers = os.getenv('KAFKA_SERVERS', 'my-kafka')
+    kafka_servers += ':9092'
     kafka_username = os.getenv('KAFKA_USERNAME', 'user1')
     kafka_password = os.getenv('KAFKA_PASSWORD', '')
 
@@ -87,10 +88,14 @@ def async_log_api_stats(endpoint, method, status, user_id):
                 'user_id': user_id,
                 'message': f"{user_id}가 {method} {endpoint} 호출 ({status})"
             }
-            producer.send('api-logs', log_data)
+
+            future = producer.send('api-logs', log_data)
+            record_metadata = future.get(timeout=10)  # 10초 타임아웃
+            print(f"✅ Kafka message sent successfully: topic={record_metadata.topic}, partition={record_metadata.partition}, offset={record_metadata.offset}")
             producer.flush()
+            producer.close()
         except Exception as e:
-            print(f"Kafka logging error: {str(e)}")
+            print(f"❌ Kafka logging error: {str(e)}")
     
     # 새로운 스레드에서 로깅 실행
     Thread(target=_log).start()
@@ -287,7 +292,8 @@ def search_messages():
 @login_required
 def get_kafka_logs():
     try:
-        kafka_servers = os.getenv('KAFKA_SERVERS', 'my-kafka:9092')
+        kafka_servers = os.getenv('KAFKA_SERVERS', 'my-kafka')
+        kafka_servers += ':9092'
         kafka_username = os.getenv('KAFKA_USERNAME', 'user1')
         kafka_password = os.getenv('KAFKA_PASSWORD', '')
 
@@ -300,7 +306,7 @@ def get_kafka_logs():
                 sasl_mechanism='PLAIN',
                 sasl_plain_username=kafka_username,
                 sasl_plain_password=kafka_password,
-                group_id='api-logs-viewer',
+                # group_id='api-logs-viewer',
                 auto_offset_reset='earliest',
                 consumer_timeout_ms=5000
             )
@@ -310,7 +316,7 @@ def get_kafka_logs():
                 bootstrap_servers=kafka_servers,
                 value_deserializer=lambda m: json.loads(m.decode('utf-8')),
                 security_protocol='PLAINTEXT',
-                group_id='api-logs-viewer',
+                # group_id='api-logs-viewer',
                 auto_offset_reset='earliest',
                 consumer_timeout_ms=5000
             )

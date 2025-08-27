@@ -8,3 +8,15 @@ broker:
 
 auth:
   enabled: false
+
+# SASL 완전 비활성화를 위한 추가 설정
+listeners:
+  client:
+    protocol: PLAINTEXT
+  controller:
+    protocol: PLAINTEXT
+  internal:
+    protocol: PLAINTEXT
+
+# 보안 프로토콜 맵 설정
+listenerSecurityProtocolMap: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT

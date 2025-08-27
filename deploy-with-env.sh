@@ -48,14 +48,6 @@ helm upgrade --install "${MYSQL_HOST}" bitnami/mariadb \
   --create-namespace \
   -f "$MARIADB_VALUES_FILE"
 
-echo "⏳ MariaDB Ready 대기"
-kubectl -n "${K8S_NAMESPACE}" wait --for=condition=ready pod -l app.kubernetes.io/instance="${MYSQL_HOST}" --timeout=300s || {
-  echo "❌ MariaDB 파드 Ready 대기 실패"; exit 1;
-}
-
-echo "🗃️  DB 초기화 실행 (apply-db-init.sh ${ENV})"
-bash ./apply-db-init.sh "${ENV}"
-
 echo "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "┃ 2) Kafka 배포 (bitnami/kafka)"
 echo "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -90,6 +82,14 @@ fi
 envsubst < k8s/backend-secret.yaml | kubectl apply -n "${K8S_NAMESPACE}" -f -
 envsubst < k8s/backend-deployment.yaml | kubectl apply -n "${K8S_NAMESPACE}" -f -
 envsubst < k8s/frontend-deployment.yaml | kubectl apply -n "${K8S_NAMESPACE}" -f -
+
+echo "⏳ MariaDB Ready 대기"
+kubectl -n "${K8S_NAMESPACE}" wait --for=condition=ready pod -l app.kubernetes.io/instance="${MYSQL_HOST}" --timeout=300s || {
+  echo "❌ MariaDB 파드 Ready 대기 실패"; exit 1;
+}
+
+echo "🗃️  DB 초기화 실행 (apply-db-init.sh ${ENV})"
+bash ./apply-db-init.sh "${ENV}"
 
 echo "📋 리소스 확인"
 kubectl get all -n "${K8S_NAMESPACE}" | cat
