@@ -13,7 +13,8 @@ spec:
       labels:
         app: backend
     spec:
-      imagePullSecrets: ${IMAGE_PULL_SECRETS}
+      imagePullSecrets:
+      ${IMAGE_PULL_SECRETS}
       containers:
       - name: backend
         image: ${BACKEND_IMAGE}
@@ -65,6 +66,10 @@ spec:
             secretKeyRef:
               name: backend-secrets
               key: FLASK_SECRET_KEY
+        - name: TEMPO_ENDPOINT
+          value: "${TEMPO_ENDPOINT}"
+        - name: OTLP_ENDPOINT
+          value: "${OTLP_ENDPOINT}"
 ---
 apiVersion: v1
 kind: Service

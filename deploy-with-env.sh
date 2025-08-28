@@ -120,7 +120,7 @@ if [ "${ENV}" = "rancher" ]; then
     echo "🐳 Rancher 로컬 이미지 사용:"
   fi
 else
-  # ACR 이미지 사용 (기존)
+  # ACR 이미지 사용
   export BACKEND_IMAGE="${ACR_LOGIN_SERVER}/${ACR_REPO_NAME_BACKEND}:latest"
   export FRONTEND_IMAGE="${ACR_LOGIN_SERVER}/${ACR_REPO_NAME_FRONTEND}:latest"
   export IMAGE_PULL_POLICY="Always"

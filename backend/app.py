@@ -11,10 +11,14 @@ from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 from threading import Thread
 import hashlib
+from telemetry import telemetry_manager
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True)  # 세션을 위한 credentials 지원
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'your-secret-key-here')  # 세션을 위한 시크릿 키
+
+# OpenTelemetry 설정
+telemetry_manager.setup_telemetry(app)
 
 # Flask-Session 설정
 app.config['SESSION_TYPE'] = 'redis'
@@ -112,26 +116,39 @@ def login_required(f):
 @app.route('/db/message', methods=['POST'])
 @login_required
 def save_to_db():
-    try:
-        user_id = session['user_id']
-        db = get_db_connection()
-        data = request.json
-        cursor = db.cursor()
-        sql = "INSERT INTO messages (message, created_at, user_id) VALUES (%s, %s, %s)"
-        cursor.execute(sql, (data['message'], datetime.now(), user_id))
-        db.commit()
-        cursor.close()
-        db.close()
-        
-        # 로깅
-        log_to_redis('db_insert', f"Message saved: {data['message'][:30]}... by {user_id}")
-        
-        async_log_api_stats('/db/message', 'POST', 'success', user_id)
-        return jsonify({"status": "success"})
-    except Exception as e:
-        async_log_api_stats('/db/message', 'POST', 'error', user_id)
-        log_to_redis('db_insert_error', str(e))
-        return jsonify({"status": "error", "message": str(e)}), 500
+    tracer = telemetry_manager.get_tracer()
+    meter = telemetry_manager.get_meter()
+    
+    with tracer.start_as_current_span("save_message_to_db") as span:
+        try:
+            user_id = session['user_id']
+            span.set_attribute("user.id", user_id)
+            span.set_attribute("db.operation", "insert")
+            
+            # 메트릭 기록
+            telemetry_manager.record_metric("db_operations_total", 1, {"operation": "insert", "status": "success"})
+            
+            db = get_db_connection()
+            data = request.json
+            cursor = db.cursor()
+            sql = "INSERT INTO messages (message, created_at, user_id) VALUES (%s, %s, %s)"
+            cursor.execute(sql, (data['message'], datetime.now(), user_id))
+            db.commit()
+            cursor.close()
+            db.close()
+            
+            # 로깅
+            log_to_redis('db_insert', f"Message saved: {data['message'][:30]}... by {user_id}")
+            
+            async_log_api_stats('/db/message', 'POST', 'success', user_id)
+            return jsonify({"status": "success"})
+        except Exception as e:
+            span.set_attribute("error", True)
+            span.set_attribute("error.message", str(e))
+            telemetry_manager.record_metric("db_operations_total", 1, {"operation": "insert", "status": "error"})
+            async_log_api_stats('/db/message', 'POST', 'error', user_id)
+            log_to_redis('db_insert_error', str(e))
+            return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/db/message', methods=['GET'])
 @login_required

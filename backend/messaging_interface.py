@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from datetime import datetime
 from threading import Thread
 import logging
+from telemetry import telemetry_manager
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -89,17 +90,34 @@ class KafkaMessaging(MessagingInterface):
     
     def send_message(self, topic, message):
         """Kafka에 메시지를 전송합니다."""
-        try:
-            producer = self.get_producer()
-            future = producer.send(topic, message)
-            record_metadata = future.get(timeout=10)
-            logger.info(f"✅ Kafka message sent: topic={record_metadata.topic}, partition={record_metadata.partition}, offset={record_metadata.offset}")
-            producer.flush()
-            producer.close()
-            return True
-        except Exception as e:
-            logger.error(f"❌ Kafka send error: {str(e)}")
-            return False
+        tracer = telemetry_manager.get_tracer()
+        
+        with tracer.start_as_current_span("kafka_send_message") as span:
+            try:
+                span.set_attribute("messaging.system", "kafka")
+                span.set_attribute("messaging.topic", topic)
+                span.set_attribute("messaging.message_size", len(str(message)))
+                
+                producer = self.get_producer()
+                future = producer.send(topic, message)
+                record_metadata = future.get(timeout=10)
+                
+                span.set_attribute("messaging.partition", record_metadata.partition)
+                span.set_attribute("messaging.offset", record_metadata.offset)
+                
+                logger.info(f"✅ Kafka message sent: topic={record_metadata.topic}, partition={record_metadata.partition}, offset={record_metadata.offset}")
+                producer.flush()
+                producer.close()
+                
+                # 메트릭 기록
+                telemetry_manager.record_metric("kafka_messages_sent_total", 1, {"topic": topic, "status": "success"})
+                return True
+            except Exception as e:
+                span.set_attribute("error", True)
+                span.set_attribute("error.message", str(e))
+                telemetry_manager.record_metric("kafka_messages_sent_total", 1, {"topic": topic, "status": "error"})
+                logger.error(f"❌ Kafka send error: {str(e)}")
+                return False
     
     def get_messages(self, topic, limit=1000):
         """Kafka에서 메시지를 조회합니다."""
