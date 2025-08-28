@@ -2,10 +2,19 @@
 
 set -euo pipefail
 
+# 사용법:
+# ./deploy-with-env.sh [환경] [DOCKER_HUB] [CLEAN_INSTALL]
+# 예시:
+#   ./deploy-with-env.sh rancher                    # rancher 환경, Docker Hub 사용
+#   ./deploy-with-env.sh rancher false              # rancher 환경, 로컬 이미지 사용
+#   ./deploy-with-env.sh rancher true true          # rancher 환경, Docker Hub 사용, 기존 삭제 후 재설치
+#   ./deploy-with-env.sh other-env                  # 다른 환경, ACR 사용
+
 # 환경 변수로 환경 설정 (기본값: rancher)
 ENV=${1:-rancher}
-# 두 번째 인자: CLEAN_INSTALL=true 시 기존 릴리스 제거 후 재설치
-CLEAN_INSTALL=${2:-false}
+DOCKER_HUB=${2:-true}
+# 세 번째 인자: CLEAN_INSTALL=true 시 기존 릴리스 제거 후 재설치
+CLEAN_INSTALL=${3:-false}
 
 # 환경별 .env 파일 로드
 if [ -f "env/.env.${ENV}" ]; then
@@ -70,14 +79,36 @@ echo "┏━━━━━━━━━━━━━━━━━━━━━━━�
 echo "┃ 4) Backend/Frontend 시크릿 및 디플로이먼트 적용"
 echo "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
+# 이미지 풀 정책과 시크릿 설정
 if [ "${ENV}" = "rancher" ]; then
-  export BACKEND_IMAGE="${ACR_REPO_NAME_BACKEND}:latest"
-  export FRONTEND_IMAGE="${ACR_REPO_NAME_FRONTEND}:latest"
-  # Rancher 로컬 이미지 사용 시 imagePullSecrets 불필요할 수 있음
+  if [ "${DOCKER_HUB}" = "true" ]; then
+    # Docker Hub 이미지 사용
+    export BACKEND_IMAGE="${DOCKER_HUB_USERNAME}/${ACR_REPO_NAME_BACKEND}:latest"
+    export FRONTEND_IMAGE="${DOCKER_HUB_USERNAME}/${ACR_REPO_NAME_FRONTEND}:latest"
+    export IMAGE_PULL_POLICY="Always"
+    export IMAGE_PULL_SECRETS="[]"
+    echo "🐳 Docker Hub 이미지 사용:"
+  else
+    # Rancher 로컬 이미지 사용
+    export BACKEND_IMAGE="${ACR_REPO_NAME_BACKEND}:latest"
+    export FRONTEND_IMAGE="${ACR_REPO_NAME_FRONTEND}:latest"
+    export IMAGE_PULL_POLICY="Never"
+    export IMAGE_PULL_SECRETS="[]"
+    echo "🐳 Rancher 로컬 이미지 사용:"
+  fi
 else
+  # ACR 이미지 사용 (기존)
   export BACKEND_IMAGE="${ACR_LOGIN_SERVER}/${ACR_REPO_NAME_BACKEND}:latest"
   export FRONTEND_IMAGE="${ACR_LOGIN_SERVER}/${ACR_REPO_NAME_FRONTEND}:latest"
+  export IMAGE_PULL_POLICY="Always"
+  export IMAGE_PULL_SECRETS="- name: acr-registry"
+  echo "🏢 ACR 이미지 사용:"
 fi
+
+echo "  Backend: ${BACKEND_IMAGE}"
+echo "  Frontend: ${FRONTEND_IMAGE}"
+echo "  Image Pull Policy: ${IMAGE_PULL_POLICY}"
+echo "  Image Pull Secrets: ${IMAGE_PULL_SECRETS:-없음}"
 
 envsubst < k8s/backend-secret.yaml | kubectl apply -n "${K8S_NAMESPACE}" -f -
 envsubst < k8s/backend-deployment.yaml | kubectl apply -n "${K8S_NAMESPACE}" -f -

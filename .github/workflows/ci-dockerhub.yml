@@ -7,6 +7,8 @@ on:
 env:
   DOCKER_HUB_USERNAME: ${{ secrets.DOCKER_HUB_USERNAME }}
   DOCKER_HUB_ACCESS_TOKEN: ${{ secrets.DOCKER_HUB_ACCESS_TOKEN }}
+  ACR_REPO_NAME_BACKEND: ${{ secrets.ACR_REPO_NAME_BACKEND }}
+  ACR_REPO_NAME_FRONTEND: ${{ secrets.ACR_REPO_NAME_FRONTEND }}
 
 jobs:
   build-backend:
@@ -31,8 +33,8 @@ jobs:
           file: ./backend/Dockerfile
           push: true
           tags: |
-            ${{ env.DOCKER_HUB_USERNAME }}/aks-demo-backend:${{ github.sha }}
-            ${{ env.DOCKER_HUB_USERNAME }}/aks-demo-backend:latest
+            ${{ env.DOCKER_HUB_USERNAME }}/${{ env.ACR_REPO_NAME_BACKEND }}:${{ github.sha }}
+            ${{ env.DOCKER_HUB_USERNAME }}/${{ env.ACR_REPO_NAME_BACKEND }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
@@ -59,8 +61,8 @@ jobs:
           file: ./frontend/Dockerfile
           push: true
           tags: |
-            ${{ env.DOCKER_HUB_USERNAME }}/aks-demo-frontend:${{ github.sha }}
-            ${{ env.DOCKER_HUB_USERNAME }}/aks-demo-frontend:latest
+            ${{ env.DOCKER_HUB_USERNAME }}/${{ env.ACR_REPO_NAME_FRONTEND }}:${{ github.sha }}
+            ${{ env.DOCKER_HUB_USERNAME }}/${{ env.ACR_REPO_NAME_FRONTEND }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
@@ -73,10 +75,10 @@ jobs:
       - name: Build Complete Notification
         run: |
           echo "✅ Docker images built and pushed successfully!"
-          echo "Backend image: ${{ env.DOCKER_HUB_USERNAME }}/aks-demo-backend:${{ github.sha }}"
-          echo "Frontend image: ${{ env.DOCKER_HUB_USERNAME }}/aks-demo-frontend:${{ github.sha }}"
+          echo "Backend image: ${{ env.DOCKER_HUB_USERNAME }}/${{ env.ACR_REPO_NAME_BACKEND }}:${{ github.sha }}"
+          echo "Frontend image: ${{ env.DOCKER_HUB_USERNAME }}/${{ env.ACR_REPO_NAME_FRONTEND }}:${{ github.sha }}"
           echo ""
           echo "🚀 You can now deploy using:"
-          echo "export BACKEND_IMAGE='${{ env.DOCKER_HUB_USERNAME }}/aks-demo-backend:${{ github.sha }}'"
-          echo "export FRONTEND_IMAGE='${{ env.DOCKER_HUB_USERNAME }}/aks-demo-frontend:${{ github.sha }}'"
+          echo "export BACKEND_IMAGE='${{ env.DOCKER_HUB_USERNAME }}/${{ env.ACR_REPO_NAME_BACKEND }}:${{ github.sha }}'"
+          echo "export FRONTEND_IMAGE='${{ env.DOCKER_HUB_USERNAME }}/${{ env.ACR_REPO_NAME_FRONTEND }}:${{ github.sha }}'"
           echo "./deploy-with-env.sh"
