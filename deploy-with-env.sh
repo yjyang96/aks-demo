@@ -114,6 +114,11 @@ envsubst < k8s/backend-secret.yaml | kubectl apply -n "${K8S_NAMESPACE}" -f -
 envsubst < k8s/backend-deployment.yaml | kubectl apply -n "${K8S_NAMESPACE}" -f -
 envsubst < k8s/frontend-deployment.yaml | kubectl apply -n "${K8S_NAMESPACE}" -f -
 
+echo "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "┃ 5) Ingress 리소스 적용 (Azure App Routing 사용)"
+echo "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+envsubst < k8s/ingress.yaml | kubectl apply -n "${K8S_NAMESPACE}" -f -
+
 echo "⏳ MariaDB Ready 대기"
 kubectl -n "${K8S_NAMESPACE}" wait --for=condition=ready pod -l app.kubernetes.io/instance="${MYSQL_HOST}" --timeout=300s || {
   echo "❌ MariaDB 파드 Ready 대기 실패"; exit 1;
@@ -124,6 +129,21 @@ bash ./apply-db-init.sh "${ENV}"
 
 echo "📋 리소스 확인"
 kubectl get all -n "${K8S_NAMESPACE}" | cat
+
+echo "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "┃ 6) Ingress 접근 정보"
+echo "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# LoadBalancer IP 가져오기
+LB_IP=$(kubectl get svc -n app-routing-system nginx -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || echo "로드중...")
+
+echo "🌐 LoadBalancer IP: ${LB_IP}"
+echo "🔗 접근 URL:"
+echo "   프론트엔드: http://frontend.${K8S_NAMESPACE}.local"
+echo "   백엔드: http://api.${K8S_NAMESPACE}.local"
+echo ""
+echo "📝 hosts 파일에 다음을 추가하세요:"
+echo "   ${LB_IP} frontend.${K8S_NAMESPACE}.local api.${K8S_NAMESPACE}.local"
 
 echo "✅ 배포 완료"
 

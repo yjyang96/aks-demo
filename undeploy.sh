@@ -43,6 +43,7 @@ set +e
 envsubst < k8s/frontend-deployment.yaml | kubectl delete -n "${K8S_NAMESPACE}" -f - --ignore-not-found=true
 envsubst < k8s/backend-deployment.yaml | kubectl delete -n "${K8S_NAMESPACE}" -f - --ignore-not-found=true
 envsubst < k8s/backend-secret.yaml | kubectl delete -n "${K8S_NAMESPACE}" -f - --ignore-not-found=true
+envsubst < k8s/ingress.yaml | kubectl delete -n "${K8S_NAMESPACE}" -f - --ignore-not-found=true
 set -e
 
 echo "📋 네임스페이스 내 잔여 리소스 확인"
