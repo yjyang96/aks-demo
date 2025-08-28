@@ -227,12 +227,46 @@ def get_from_db():
 
 # Redis 로그 조회
 @app.route('/logs/redis', methods=['GET'])
+@login_required
 def get_redis_logs():
     try:
+        user_id = session['user_id']
+        
+        # 페이지네이션 파라미터 처리
+        page = request.args.get('page', 1, type=int)
+        limit = request.args.get('limit', 20, type=int)
+        
+        # 파라미터 유효성 검사
+        if page < 1:
+            page = 1
+        if limit < 1 or limit > 100:
+            limit = 20
+        
         redis_client = get_redis_connection()
-        logs = redis_client.lrange('api_logs', 0, -1)
+        all_logs = redis_client.lrange('api_logs', 0, -1)
         redis_client.close()
-        return jsonify([json.loads(log) for log in logs])
+        
+        # JSON 파싱
+        logs = [json.loads(log) for log in all_logs]
+        
+        # 전체 로그 수
+        total_count = len(logs)
+        
+        # 페이지네이션 적용
+        start_idx = (page - 1) * limit
+        end_idx = start_idx + limit
+        paginated_logs = logs[start_idx:end_idx]
+        
+        return jsonify({
+            "logs": paginated_logs,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total_count,
+                "current_page": page,
+                "total_pages": (total_count + limit - 1) // limit
+            }
+        })
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
 
@@ -356,9 +390,29 @@ def logout():
 def get_all_messages():
     try:
         user_id = session['user_id']
+        
+        # 페이지네이션 파라미터 처리
+        page = request.args.get('page', 1, type=int)
+        limit = request.args.get('limit', 20, type=int)
+        
+        # 파라미터 유효성 검사
+        if page < 1:
+            page = 1
+        if limit < 1 or limit > 100:
+            limit = 20
+        
+        # offset 계산
+        offset = (page - 1) * limit
+        
         db = get_db_connection()
         cursor = db.cursor(dictionary=True)
-        cursor.execute("SELECT * FROM messages ORDER BY id DESC")
+        
+        # 전체 메시지 수 조회
+        cursor.execute("SELECT COUNT(*) as total FROM messages")
+        total_count = cursor.fetchone()['total']
+        
+        # 페이지네이션된 메시지 조회
+        cursor.execute("SELECT * FROM messages ORDER BY id DESC LIMIT %s OFFSET %s", (limit, offset))
         messages = cursor.fetchall()
         cursor.close()
         db.close()
@@ -366,7 +420,16 @@ def get_all_messages():
         # 비동기 로깅으로 변경
         async_log_api_stats('/db/messages/all', 'GET', 'success', user_id)
         
-        return jsonify(messages)
+        return jsonify({
+            "messages": messages,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total_count,
+                "current_page": page,
+                "total_pages": (total_count + limit - 1) // limit
+            }
+        })
     except Exception as e:
         if 'user_id' in session:
             async_log_api_stats('/db/messages/all', 'GET', 'error', session['user_id'])
@@ -380,8 +443,27 @@ def search_messages():
         query = request.args.get('q', '').strip()
         user_id = session['user_id']
         
+        # 페이지네이션 파라미터 처리
+        page = request.args.get('page', 1, type=int)
+        limit = request.args.get('limit', 20, type=int)
+        
+        # 파라미터 유효성 검사
+        if page < 1:
+            page = 1
+        if limit < 1 or limit > 100:
+            limit = 20
+        
         if not query:
-            return jsonify([])
+            return jsonify({
+                "results": [],
+                "pagination": {
+                    "page": page,
+                    "limit": limit,
+                    "total": 0,
+                    "current_page": page,
+                    "total_pages": 0
+                }
+            })
         
         # 캐시 키 생성 (쿼리 해시만 사용)
         query_hash = hashlib.md5(query.encode()).hexdigest()[:12]
@@ -402,7 +484,24 @@ def search_messages():
                 
                 print(f"Cache HIT for query: {query} (hits: {cache_info['hit_count']})")
                 async_log_api_stats('/db/messages/search', 'GET', 'cache_hit', user_id)
-                return jsonify(cache_info['results'])
+                
+                # 캐시된 결과에 페이지네이션 적용
+                all_results = cache_info['results']
+                total_count = len(all_results)
+                start_idx = (page - 1) * limit
+                end_idx = start_idx + limit
+                paginated_results = all_results[start_idx:end_idx]
+                
+                return jsonify({
+                    "results": paginated_results,
+                    "pagination": {
+                        "page": page,
+                        "limit": limit,
+                        "total": total_count,
+                        "current_page": page,
+                        "total_pages": (total_count + limit - 1) // limit
+                    }
+                })
             
             redis_client.close()
         except Exception as redis_error:
@@ -412,18 +511,34 @@ def search_messages():
         print(f"Cache MISS for query: {query}")
         db = get_db_connection()
         cursor = db.cursor(dictionary=True)
-        sql = "SELECT * FROM messages WHERE message LIKE %s ORDER BY id DESC"
-        cursor.execute(sql, (f"%{query}%",))
+        
+        # 전체 검색 결과 수 조회
+        count_sql = "SELECT COUNT(*) as total FROM messages WHERE message LIKE %s"
+        cursor.execute(count_sql, (f"%{query}%",))
+        total_count = cursor.fetchone()['total']
+        
+        # 페이지네이션된 검색 결과 조회
+        sql = "SELECT * FROM messages WHERE message LIKE %s ORDER BY id DESC LIMIT %s OFFSET %s"
+        offset = (page - 1) * limit
+        cursor.execute(sql, (f"%{query}%", limit, offset))
         results = cursor.fetchall()
         cursor.close()
         db.close()
         
-        # 검색 결과를 캐시에 저장
+        # 검색 결과를 캐시에 저장 (전체 결과)
         try:
+            # 전체 결과를 다시 조회하여 캐시에 저장
+            db = get_db_connection()
+            cursor = db.cursor(dictionary=True)
+            cursor.execute("SELECT * FROM messages WHERE message LIKE %s ORDER BY id DESC", (f"%{query}%",))
+            all_results = cursor.fetchall()
+            cursor.close()
+            db.close()
+            
             redis_client = get_redis_connection()
             cache_data = {
                 "query": query,
-                "results": results,
+                "results": all_results,
                 "timestamp": datetime.now().isoformat(),
                 "expires_at": (datetime.now() + timedelta(minutes=1)).isoformat(),
                 "hit_count": 1
@@ -438,7 +553,16 @@ def search_messages():
         # 검색 이력을 Kafka에 저장
         async_log_api_stats('/db/messages/search', 'GET', 'success', user_id)
         
-        return jsonify(results)
+        return jsonify({
+            "results": results,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total_count,
+                "current_page": page,
+                "total_pages": (total_count + limit - 1) // limit
+            }
+        })
     except Exception as e:
         if 'user_id' in session:
             async_log_api_stats('/db/messages/search', 'GET', 'error', session['user_id'])
@@ -449,6 +573,18 @@ def search_messages():
 @login_required
 def get_kafka_logs():
     try:
+        user_id = session['user_id']
+        
+        # 페이지네이션 파라미터 처리
+        page = request.args.get('page', 1, type=int)
+        limit = request.args.get('limit', 20, type=int)
+        
+        # 파라미터 유효성 검사
+        if page < 1:
+            page = 1
+        if limit < 1 or limit > 100:
+            limit = 20
+        
         kafka_servers = os.getenv('KAFKA_SERVERS', 'my-kafka')
         kafka_servers += ':9092'
         kafka_username = os.getenv('KAFKA_USERNAME', 'user1')
@@ -478,10 +614,10 @@ def get_kafka_logs():
                 consumer_timeout_ms=5000
             )
         
-        logs = []
+        all_logs = []
         try:
             for message in consumer:
-                logs.append({
+                all_logs.append({
                     'timestamp': message.value['timestamp'],
                     'endpoint': message.value['endpoint'],
                     'method': message.value['method'],
@@ -489,14 +625,32 @@ def get_kafka_logs():
                     'user_id': message.value['user_id'],
                     'message': message.value['message']
                 })
-                if len(logs) >= 100:
+                if len(all_logs) >= 1000:  # 더 많은 로그를 가져와서 페이지네이션에 활용
                     break
         finally:
             consumer.close()
         
         # 시간 역순으로 정렬
-        logs.sort(key=lambda x: x['timestamp'], reverse=True)
-        return jsonify(logs)
+        all_logs.sort(key=lambda x: x['timestamp'], reverse=True)
+        
+        # 전체 로그 수
+        total_count = len(all_logs)
+        
+        # 페이지네이션 적용
+        start_idx = (page - 1) * limit
+        end_idx = start_idx + limit
+        paginated_logs = all_logs[start_idx:end_idx]
+        
+        return jsonify({
+            "logs": paginated_logs,
+            "pagination": {
+                "page": page,
+                "limit": limit,
+                "total": total_count,
+                "current_page": page,
+                "total_pages": (total_count + limit - 1) // limit
+            }
+        })
     except Exception as e:
         print(f"Kafka log retrieval error: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500

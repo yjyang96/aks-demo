@@ -59,10 +59,10 @@
             
             <!-- 페이지네이션 버튼 -->
             <div class="pagination">
-              <button @click="goToFirstPage" :disabled="currentPage === 1 || loading" class="page-btn">
+              <button @click="() => goToFirstPage()" :disabled="currentPage === 1 || loading" class="page-btn">
                 처음
               </button>
-              <button @click="goToPrevPage" :disabled="currentPage === 1 || loading" class="page-btn">
+              <button @click="() => goToPrevPage()" :disabled="currentPage === 1 || loading" class="page-btn">
                 이전
               </button>
               
@@ -71,7 +71,7 @@
                 <button 
                   v-for="page in getVisiblePages()" 
                   :key="page"
-                  @click="goToPage(page)"
+                  @click="() => goToPage(page)"
                   :class="['page-number', { active: page === currentPage }]"
                   :disabled="loading"
                 >
@@ -79,10 +79,10 @@
                 </button>
               </div>
               
-              <button @click="goToNextPage" :disabled="currentPage === totalPages || loading" class="page-btn">
+              <button @click="() => goToNextPage()" :disabled="currentPage === totalPages || loading" class="page-btn">
                 다음
               </button>
-              <button @click="goToLastPage" :disabled="currentPage === totalPages || loading" class="page-btn">
+              <button @click="() => goToLastPage()" :disabled="currentPage === totalPages || loading" class="page-btn">
                 마지막
               </button>
             </div>
@@ -91,25 +91,49 @@
 
         <div class="section">
           <h2>Redis 로그</h2>
-          <button @click="getRedisLogs">로그 조회</button>
+          <button @click="getRedisLogs(1)">Redis 로그 조회</button>
           <div v-if="redisLogs.length">
-            <h3>API 호출 로그:</h3>
+            <h3>API 호출 로그 (총 {{ redisLogsTotal }}개):</h3>
             <ul>
               <li v-for="(log, index) in redisLogs" :key="index">
                 [{{ formatDate(log.timestamp) }}] {{ log.action }}: {{ log.details }}
               </li>
             </ul>
+            
+            <!-- Redis 로그 페이지네이션 -->
+            <div class="pagination-info">
+              <p>페이지 {{ redisLogsPage }} / {{ redisLogsTotalPages }} ({{ redisLogs.length }}개 표시)</p>
+            </div>
+            
+            <div class="pagination">
+              <button @click="() => getRedisLogs(1)" :disabled="redisLogsPage === 1" class="page-btn">처음</button>
+              <button @click="() => getRedisLogs(redisLogsPage - 1)" :disabled="redisLogsPage === 1" class="page-btn">이전</button>
+              
+              <div class="page-numbers">
+                <button 
+                  v-for="page in getRedisLogsVisiblePages()" 
+                  :key="page"
+                  @click="() => getRedisLogs(page)"
+                  :class="['page-number', { active: page === redisLogsPage }]"
+                >
+                  {{ page }}
+                </button>
+              </div>
+              
+              <button @click="() => getRedisLogs(redisLogsPage + 1)" :disabled="redisLogsPage === redisLogsTotalPages" class="page-btn">다음</button>
+              <button @click="() => getRedisLogs(redisLogsTotalPages)" :disabled="redisLogsPage === redisLogsTotalPages" class="page-btn">마지막</button>
+            </div>
           </div>
         </div>
 
         <div class="section">
           <h2>Kafka 로그</h2>
-          <button @click="getKafkaLogs" class="kafka-btn">Kafka 로그 조회</button>
+          <button @click="getKafkaLogs(1)" class="kafka-btn">Kafka 로그 조회</button>
           <div v-if="kafkaLogsLoading" class="loading-spinner">
             <p>Kafka 로그를 불러오는 중...</p>
           </div>
           <div v-if="kafkaLogs.length" class="kafka-logs">
-            <h3>Kafka API 로그:</h3>
+            <h3>Kafka API 로그 (총 {{ kafkaLogsTotal }}개):</h3>
             <div class="kafka-log-container">
               <div v-for="(log, index) in kafkaLogs" :key="index" class="kafka-log-item">
                 <div class="log-header">
@@ -123,6 +147,30 @@
                 </div>
               </div>
             </div>
+            
+            <!-- Kafka 로그 페이지네이션 -->
+            <div class="pagination-info">
+              <p>페이지 {{ kafkaLogsPage }} / {{ kafkaLogsTotalPages }} ({{ kafkaLogs.length }}개 표시)</p>
+            </div>
+            
+            <div class="pagination">
+              <button @click="() => getKafkaLogs(1)" :disabled="kafkaLogsPage === 1" class="page-btn">처음</button>
+              <button @click="() => getKafkaLogs(kafkaLogsPage - 1)" :disabled="kafkaLogsPage === 1" class="page-btn">이전</button>
+              
+              <div class="page-numbers">
+                <button 
+                  v-for="page in getKafkaLogsVisiblePages()" 
+                  :key="page"
+                  @click="() => getKafkaLogs(page)"
+                  :class="['page-number', { active: page === kafkaLogsPage }]"
+                >
+                  {{ page }}
+                </button>
+              </div>
+              
+              <button @click="() => getKafkaLogs(kafkaLogsPage + 1)" :disabled="kafkaLogsPage === kafkaLogsTotalPages" class="page-btn">다음</button>
+              <button @click="() => getKafkaLogs(kafkaLogsTotalPages)" :disabled="kafkaLogsPage === kafkaLogsTotalPages" class="page-btn">마지막</button>
+            </div>
           </div>
           <div v-if="kafkaLogsError" class="error-message">
             <p>❌ Kafka 로그 조회 실패: {{ kafkaLogsError }}</p>
@@ -132,9 +180,9 @@
         <div class="section">
           <h2>메시지 검색</h2>
           <div class="search-section">
-            <input v-model="searchQuery" placeholder="메시지 검색">
-            <button @click="searchMessages">검색</button>
-            <button @click="getAllMessages" class="view-all-btn">전체 메시지 보기</button>
+            <input v-model="searchQuery" placeholder="메시지 검색" @keyup.enter="() => searchMessages(1)">
+            <button @click="() => searchMessages(1)">검색</button>
+            <button @click="() => getAllMessages(1)" class="view-all-btn">전체 메시지 보기</button>
             <button @click="toggleCacheManager" class="cache-btn">캐시 관리</button>
           </div>
           
@@ -183,8 +231,8 @@
             </div>
           </div>
           
-          <div v-if="searchResults.length > 0" class="search-results">
-            <h3>검색 결과:</h3>
+          <div v-if="searchExecuted && (searchResults.length > 0 || searchTotal === 0)" class="search-results">
+            <h3>검색 결과 (총 {{ searchTotal }}개):</h3>
             <table>
               <thead>
                 <tr>
@@ -203,6 +251,81 @@
                 </tr>
               </tbody>
             </table>
+            
+            <!-- 검색 결과가 없을 때 메시지 -->
+            <div v-if="searchResults.length === 0 && searchTotal === 0" class="no-results">
+              <p>검색 결과가 없습니다.</p>
+            </div>
+            
+            <!-- 검색 결과 페이지네이션 -->
+            <div v-if="searchTotal > 0" class="pagination-info">
+              <p>페이지 {{ searchPage }} / {{ searchTotalPages }} ({{ searchResults.length }}개 표시)</p>
+            </div>
+            
+            <div v-if="searchTotal > 0" class="pagination">
+              <button @click="() => searchMessages(1)" :disabled="searchPage === 1" class="page-btn">처음</button>
+              <button @click="() => searchMessages(searchPage - 1)" :disabled="searchPage === 1" class="page-btn">이전</button>
+              
+              <div class="page-numbers">
+                <button 
+                  v-for="page in getSearchVisiblePages()" 
+                  :key="page"
+                  @click="() => searchMessages(page)"
+                  :class="['page-number', { active: page === searchPage }]"
+                >
+                  {{ page }}
+                </button>
+              </div>
+              
+              <button @click="() => searchMessages(searchPage + 1)" :disabled="searchPage === searchTotalPages" class="page-btn">다음</button>
+              <button @click="() => searchMessages(searchTotalPages)" :disabled="searchPage === searchTotalPages" class="page-btn">마지막</button>
+            </div>
+          </div>
+          
+          <div v-if="allMessages.length > 0" class="all-messages">
+            <h3>전체 메시지 (총 {{ allMessagesTotal }}개):</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>메시지</th>
+                  <th>생성 시간</th>
+                  <th>사용자</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="message in allMessages" :key="message.id">
+                  <td>{{ message.id }}</td>
+                  <td>{{ message.message }}</td>
+                  <td>{{ formatDate(message.created_at) }}</td>
+                  <td>{{ message.user_id || '없음' }}</td>
+                </tr>
+              </tbody>
+            </table>
+            
+            <!-- 전체 메시지 페이지네이션 -->
+            <div v-if="allMessagesTotal > 0" class="pagination-info">
+              <p>페이지 {{ allMessagesPage }} / {{ allMessagesTotalPages }} ({{ allMessages.length }}개 표시)</p>
+            </div>
+            
+            <div v-if="allMessagesTotal > 0" class="pagination">
+              <button @click="() => getAllMessages(1)" :disabled="allMessagesPage === 1" class="page-btn">처음</button>
+              <button @click="() => getAllMessages(allMessagesPage - 1)" :disabled="allMessagesPage === 1" class="page-btn">이전</button>
+              
+              <div class="page-numbers">
+                <button 
+                  v-for="page in getAllMessagesVisiblePages()" 
+                  :key="page"
+                  @click="() => getAllMessages(page)"
+                  :class="['page-number', { active: page === allMessagesPage }]"
+                >
+                  {{ page }}
+                </button>
+              </div>
+              
+              <button @click="() => getAllMessages(allMessagesPage + 1)" :disabled="allMessagesPage === allMessagesTotalPages" class="page-btn">다음</button>
+              <button @click="() => getAllMessages(allMessagesTotalPages)" :disabled="allMessagesPage === allMessagesTotalPages" class="page-btn">마지막</button>
+            </div>
           </div>
         </div>
       </div>
@@ -249,9 +372,26 @@ export default {
       confirmPassword: '',
       currentUser: null,
       searchResults: [],
+      searchPage: 1,
+      searchTotal: 0,
+      searchTotalPages: 1,
+      redisLogs: [],
+      redisLogsPage: 1,
+      redisLogsTotal: 0,
+      redisLogsTotalPages: 1,
       kafkaLogs: [],
+      kafkaLogsPage: 1,
+      kafkaLogsTotal: 0,
+      kafkaLogsTotalPages: 1,
       kafkaLogsLoading: false,
       kafkaLogsError: null,
+      // 전체 메시지 관련
+      allMessages: [],
+      allMessagesPage: 1,
+      allMessagesTotal: 0,
+      allMessagesTotalPages: 1,
+      // 검색 상태 추적
+      searchExecuted: false,
       // 캐시 관리 관련
       showCacheManager: false,
       cacheStats: {},
@@ -341,22 +481,40 @@ export default {
     },
 
     // Redis에 저장된 API 호출 로그 조회
-    async getRedisLogs() {
+    async getRedisLogs(page = 1) {
       try {
-        const response = await axios.get(`${API_BASE_URL}/logs/redis`);
-        this.redisLogs = response.data;
+        this.redisLogsPage = page;
+        const response = await axios.get(`${API_BASE_URL}/logs/redis?page=${page}&limit=20`);
+        
+        if (response.data.logs) {
+          this.redisLogs = response.data.logs;
+          this.redisLogsTotal = response.data.pagination.total;
+          this.redisLogsTotalPages = response.data.pagination.total_pages;
+        } else {
+          // 기존 형식 호환성 유지
+          this.redisLogs = response.data;
+        }
       } catch (error) {
         console.error('Redis 로그 조회 실패:', error);
       }
     },
 
     // Kafka에 저장된 API 호출 로그 조회
-    async getKafkaLogs() {
+    async getKafkaLogs(page = 1) {
       try {
         this.kafkaLogsLoading = true;
         this.kafkaLogsError = null;
-        const response = await axios.get(`${API_BASE_URL}/logs/kafka`);
-        this.kafkaLogs = response.data;
+        this.kafkaLogsPage = page;
+        const response = await axios.get(`${API_BASE_URL}/logs/kafka?page=${page}&limit=20`);
+        
+        if (response.data.logs) {
+          this.kafkaLogs = response.data.logs;
+          this.kafkaLogsTotal = response.data.pagination.total;
+          this.kafkaLogsTotalPages = response.data.pagination.total_pages;
+        } else {
+          // 기존 형식 호환성 유지
+          this.kafkaLogs = response.data;
+        }
         console.log('Kafka 로그 조회 성공:', this.kafkaLogs);
       } catch (error) {
         console.error('Kafka 로그 조회 실패:', error);
@@ -417,13 +575,36 @@ export default {
     },
 
     // 메시지 검색 기능
-    async searchMessages() {
+    async searchMessages(page = 1) {
       try {
         this.loading = true;
+        this.searchPage = page;
+        this.searchExecuted = true; // 검색 실행됨을 표시
+        
+        // 검색 시 전체 메시지 완전히 숨기기
+        this.allMessages = [];
+        this.allMessagesPage = 1;
+        this.allMessagesTotal = 0;
+        this.allMessagesTotalPages = 1;
+        
         const response = await axios.get(`${API_BASE_URL}/db/messages/search`, {
-          params: { q: this.searchQuery }
+          params: { 
+            q: this.searchQuery,
+            page: page,
+            limit: 20
+          }
         });
-        this.searchResults = response.data;
+        
+        if (response.data.results) {
+          this.searchResults = response.data.results;
+          this.searchTotal = response.data.pagination.total;
+          this.searchTotalPages = response.data.pagination.total_pages;
+        } else {
+          // 기존 형식 호환성 유지
+          this.searchResults = response.data;
+          this.searchTotal = response.data.length;
+          this.searchTotalPages = 1;
+        }
       } catch (error) {
         console.error('검색 실패:', error);
         alert('검색에 실패했습니다.');
@@ -492,11 +673,30 @@ export default {
     },
 
     // 전체 메시지 조회
-    async getAllMessages() {
+    async getAllMessages(page = 1) {
       try {
         this.loading = true;
-        const response = await axios.get(`${API_BASE_URL}/db/messages`);
-        this.searchResults = response.data;
+        this.allMessagesPage = page;
+        // 전체 메시지 조회 시 검색 결과 완전히 숨기기
+        this.searchResults = [];
+        this.searchPage = 1;
+        this.searchTotal = 0;
+        this.searchTotalPages = 1;
+        this.searchQuery = ''; // 검색어도 초기화
+        this.searchExecuted = false; // 검색 실행 상태 초기화
+        
+        const response = await axios.get(`${API_BASE_URL}/db/messages?page=${page}&limit=20`);
+        
+        if (response.data.messages) {
+          this.allMessages = response.data.messages;
+          this.allMessagesTotal = response.data.pagination.total;
+          this.allMessagesTotalPages = response.data.pagination.total_pages;
+        } else {
+          // 기존 형식 호환성 유지
+          this.allMessages = response.data;
+          this.allMessagesTotal = response.data.length;
+          this.allMessagesTotalPages = 1;
+        }
       } catch (error) {
         console.error('전체 메시지 로드 실패:', error);
       } finally {
@@ -563,6 +763,122 @@ export default {
         if (end - start < 4) {
           if (start === 1) {
             end = Math.min(this.totalPages, start + 4);
+          } else {
+            start = Math.max(1, end - 4);
+          }
+        }
+        
+        for (let i = start; i <= end; i++) {
+          pages.push(i);
+        }
+      }
+      
+      return pages;
+    },
+
+    // Redis 로그 페이지네이션용 페이지 번호들 계산
+    getRedisLogsVisiblePages() {
+      const pages = [];
+      const maxVisible = 5;
+      
+      if (this.redisLogsTotalPages <= maxVisible) {
+        for (let i = 1; i <= this.redisLogsTotalPages; i++) {
+          pages.push(i);
+        }
+      } else {
+        let start = Math.max(1, this.redisLogsPage - 2);
+        let end = Math.min(this.redisLogsTotalPages, this.redisLogsPage + 2);
+        
+        if (end - start < 4) {
+          if (start === 1) {
+            end = Math.min(this.redisLogsTotalPages, start + 4);
+          } else {
+            start = Math.max(1, end - 4);
+          }
+        }
+        
+        for (let i = start; i <= end; i++) {
+          pages.push(i);
+        }
+      }
+      
+      return pages;
+    },
+
+    // Kafka 로그 페이지네이션용 페이지 번호들 계산
+    getKafkaLogsVisiblePages() {
+      const pages = [];
+      const maxVisible = 5;
+      
+      if (this.kafkaLogsTotalPages <= maxVisible) {
+        for (let i = 1; i <= this.kafkaLogsTotalPages; i++) {
+          pages.push(i);
+        }
+      } else {
+        let start = Math.max(1, this.kafkaLogsPage - 2);
+        let end = Math.min(this.kafkaLogsTotalPages, this.kafkaLogsPage + 2);
+        
+        if (end - start < 4) {
+          if (start === 1) {
+            end = Math.min(this.kafkaLogsTotalPages, start + 4);
+          } else {
+            start = Math.max(1, end - 4);
+          }
+        }
+        
+        for (let i = start; i <= end; i++) {
+          pages.push(i);
+        }
+      }
+      
+      return pages;
+    },
+
+    // 검색 결과 페이지네이션용 페이지 번호들 계산
+    getSearchVisiblePages() {
+      const pages = [];
+      const maxVisible = 5;
+      
+      if (this.searchTotalPages <= maxVisible) {
+        for (let i = 1; i <= this.searchTotalPages; i++) {
+          pages.push(i);
+        }
+      } else {
+        let start = Math.max(1, this.searchPage - 2);
+        let end = Math.min(this.searchTotalPages, this.searchPage + 2);
+        
+        if (end - start < 4) {
+          if (start === 1) {
+            end = Math.min(this.searchTotalPages, start + 4);
+          } else {
+            start = Math.max(1, end - 4);
+          }
+        }
+        
+        for (let i = start; i <= end; i++) {
+          pages.push(i);
+        }
+      }
+      
+      return pages;
+    },
+
+    // 전체 메시지 페이지네이션용 페이지 번호들 계산
+    getAllMessagesVisiblePages() {
+      const pages = [];
+      const maxVisible = 5;
+      
+      if (this.allMessagesTotalPages <= maxVisible) {
+        for (let i = 1; i <= this.allMessagesTotalPages; i++) {
+          pages.push(i);
+        }
+      } else {
+        let start = Math.max(1, this.allMessagesPage - 2);
+        let end = Math.min(this.allMessagesTotalPages, this.allMessagesPage + 2);
+        
+        if (end - start < 4) {
+          if (start === 1) {
+            end = Math.min(this.allMessagesTotalPages, start + 4);
           } else {
             start = Math.max(1, end - 4);
           }
@@ -743,6 +1059,13 @@ li {
 
 .page-number.active:hover {
   background-color: #0056b3;
+}
+
+.no-results {
+  text-align: center;
+  padding: 20px;
+  color: #6c757d;
+  font-style: italic;
 }
 
 .loading-spinner {
