@@ -22,7 +22,7 @@
 
 ### 4. 로깅 시스템
 - Redis 로깅: API 호출 로그 저장 및 조회
-- Kafka 로깅: API 통계 데이터 수집
+- 메시징 시스템 로깅: Kafka 또는 Azure Event Hubs를 통한 API 통계 데이터 수집
 
 ## 데이터베이스 구조
 
@@ -62,7 +62,7 @@ CREATE TABLE messages (
 
 ### 로그 관리
 - GET /logs/redis: Redis 로그 조회
-- GET /logs/kafka: Kafka 로그 조회
+- GET /logs/messaging: 메시징 시스템 로그 조회 (Kafka/Event Hubs)
 
 ## 환경 변수 설정
 ```yaml
@@ -71,9 +71,13 @@ CREATE TABLE messages (
 - MYSQL_PASSWORD: MariaDB 비밀번호
 - REDIS_HOST: Redis 호스트
 - REDIS_PASSWORD: Redis 비밀번호
-- KAFKA_SERVERS: Kafka 서버
-- KAFKA_USERNAME: Kafka 사용자
-- KAFKA_PASSWORD: Kafka 비밀번호
+- MESSAGING_TYPE: 메시징 시스템 타입 (kafka 또는 eventhub)
+- KAFKA_SERVERS: Kafka 서버 (MESSAGING_TYPE=kafka일 때)
+- KAFKA_USERNAME: Kafka 사용자 (MESSAGING_TYPE=kafka일 때)
+- KAFKA_PASSWORD: Kafka 비밀번호 (MESSAGING_TYPE=kafka일 때)
+- EVENTHUB_CONNECTION_STRING: Event Hubs 연결 문자열 (MESSAGING_TYPE=eventhub일 때)
+- EVENTHUB_NAME: Event Hub 이름 (MESSAGING_TYPE=eventhub일 때)
+- EVENTHUB_CONSUMER_GROUP: Consumer Group (MESSAGING_TYPE=eventhub일 때)
 - FLASK_SECRET_KEY: Flask 세션 암호화 키
 ```
 

@@ -3,5 +3,7 @@ flask-cors
 flask-session
 redis
 kafka-python
+azure-eventhub
+azure-eventhub-checkpointstoreblob
 mysql-connector-python
 werkzeug 

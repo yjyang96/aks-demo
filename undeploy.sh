@@ -18,11 +18,19 @@ else
     exit 1
 fi
 
+# 메시징 시스템 설정 확인
+MESSAGING_TYPE=${MESSAGING_TYPE:-kafka}
+echo "📡 메시징 시스템: ${MESSAGING_TYPE}"
+
 echo "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "┃ 1) Helm 릴리스 삭제 (MariaDB / Kafka / Redis)"
 echo "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 helm uninstall "${MYSQL_HOST}" -n "${K8S_NAMESPACE}" || true
-helm uninstall "${KAFKA_SERVERS}" -n "${K8S_NAMESPACE}" || true
+
+if [ "${MESSAGING_TYPE}" = "kafka" ]; then
+  helm uninstall "${KAFKA_SERVERS}" -n "${K8S_NAMESPACE}" || true
+fi
+
 helm uninstall "${REDIS_HOST}" -n "${K8S_NAMESPACE}" || true
 
 echo "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -43,7 +51,19 @@ set +e
 envsubst < k8s/frontend-deployment.yaml | kubectl delete -n "${K8S_NAMESPACE}" -f - --ignore-not-found=true
 envsubst < k8s/backend-deployment.yaml | kubectl delete -n "${K8S_NAMESPACE}" -f - --ignore-not-found=true
 envsubst < k8s/backend-secret.yaml | kubectl delete -n "${K8S_NAMESPACE}" -f - --ignore-not-found=true
-envsubst < k8s/ingress.yaml | kubectl delete -n "${K8S_NAMESPACE}" -f - --ignore-not-found=true
+
+# Event Hubs Secret 삭제 (Azure Event Hubs 연결 정보)
+if [ "${MESSAGING_TYPE}" = "eventhub" ]; then
+  envsubst < k8s/eventhub-secret.yaml | kubectl delete -n "${K8S_NAMESPACE}" -f - --ignore-not-found=true
+fi
+
+# Azure 환경에서만 Ingress 삭제
+if [ "${ENV}" != "rancher" ]; then
+  echo "🗑️  Ingress 리소스 삭제 (Azure App Routing)"
+  envsubst < k8s/ingress.yaml | kubectl delete -n "${K8S_NAMESPACE}" -f - --ignore-not-found=true
+else
+  echo "⏭️  Ingress 삭제 스킵 (Rancher 환경)"
+fi
 set -e
 
 echo "📋 네임스페이스 내 잔여 리소스 확인"

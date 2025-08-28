@@ -505,7 +505,7 @@ export default {
         this.kafkaLogsLoading = true;
         this.kafkaLogsError = null;
         this.kafkaLogsPage = page;
-        const response = await axios.get(`${API_BASE_URL}/logs/kafka?page=${page}&limit=20`);
+        const response = await axios.get(`${API_BASE_URL}/logs/messaging?page=${page}&limit=20`);
         
         if (response.data.logs) {
           this.kafkaLogs = response.data.logs;

@@ -6,7 +6,7 @@ import mysql.connector
 import json
 from datetime import datetime, timedelta
 import os
-from kafka import KafkaProducer, KafkaConsumer
+from messaging_interface import async_log_api_stats
 from functools import wraps
 from werkzeug.security import generate_password_hash, check_password_hash
 from threading import Thread
@@ -72,28 +72,15 @@ def get_redis_connection():
         db=0
     )
 
-# Kafka Producer 설정
-def get_kafka_producer():
-    kafka_servers = os.getenv('KAFKA_SERVERS', 'my-kafka')
-    kafka_servers += ':9092'
-    kafka_username = os.getenv('KAFKA_USERNAME', 'user1')
-    kafka_password = os.getenv('KAFKA_PASSWORD', '')
-
-    if kafka_password:
-        return KafkaProducer(
-            bootstrap_servers=kafka_servers,
-            value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-            security_protocol='SASL_PLAINTEXT',
-            sasl_mechanism='PLAIN',
-            sasl_plain_username=kafka_username,
-            sasl_plain_password=kafka_password
-        )
-    else:
-        return KafkaProducer(
-            bootstrap_servers=kafka_servers,
-            value_serializer=lambda v: json.dumps(v).encode('utf-8'),
-            security_protocol='PLAINTEXT'
-        )
+# 메시징 시스템 설정
+def get_messaging_system():
+    """환경 변수에 따라 메시징 시스템을 반환합니다."""
+    try:
+        from messaging_interface import MessagingFactory
+        return MessagingFactory.create_messaging()
+    except Exception as e:
+        print(f"❌ 메시징 시스템 초기화 오류: {str(e)}")
+        return None
 
 # 로깅 함수
 def log_to_redis(action, details):
@@ -110,33 +97,7 @@ def log_to_redis(action, details):
     except Exception as e:
         print(f"Redis logging error: {str(e)}")
 
-# API 통계 로깅을 비동기로 처리하는 함수
-def async_log_api_stats(endpoint, method, status, user_id):
-    def _log():
-        try:
-            producer = get_kafka_producer()
-            log_data = {
-                'timestamp': datetime.now().isoformat(),
-                'endpoint': endpoint,
-                'method': method,
-                'status': status,
-                'user_id': user_id,
-                'message': f"{user_id}가 {method} {endpoint} 호출 ({status})"
-            }
-
-            future = producer.send('api-logs', log_data)
-            record_metadata = future.get(timeout=10)  # 10초 타임아웃
-            print(f"✅ Kafka message sent successfully: topic={record_metadata.topic}, partition={record_metadata.partition}, offset={record_metadata.offset}")
-            producer.flush()
-            producer.close()
-        except Exception as e:
-            print(f"❌ Kafka logging error: {str(e)}")
-    
-    # 새로운 스레드에서 로깅 실행
-    Thread(target=_log).start()
-    
-    #  # 스레드 풀을 사용하여 작업 실행
-    # thread_pool.submit(_log)
+# API 통계 로깅은 messaging_interface에서 처리됩니다.
 
 # 로그인 데코레이터
 def login_required(f):
@@ -568,10 +529,10 @@ def search_messages():
             async_log_api_stats('/db/messages/search', 'GET', 'error', session['user_id'])
         return jsonify({"status": "error", "message": str(e)}), 500
 
-# Kafka 로그 조회 엔드포인트
-@app.route('/logs/kafka', methods=['GET'])
+# 메시징 시스템 로그 조회 엔드포인트
+@app.route('/logs/messaging', methods=['GET'])
 @login_required
-def get_kafka_logs():
+def get_messaging_logs():
     try:
         user_id = session['user_id']
         
@@ -585,50 +546,13 @@ def get_kafka_logs():
         if limit < 1 or limit > 100:
             limit = 20
         
-        kafka_servers = os.getenv('KAFKA_SERVERS', 'my-kafka')
-        kafka_servers += ':9092'
-        kafka_username = os.getenv('KAFKA_USERNAME', 'user1')
-        kafka_password = os.getenv('KAFKA_PASSWORD', '')
-
-        if kafka_password:
-            consumer = KafkaConsumer(
-                'api-logs',
-                bootstrap_servers=kafka_servers,
-                value_deserializer=lambda m: json.loads(m.decode('utf-8')),
-                security_protocol='SASL_PLAINTEXT',
-                sasl_mechanism='PLAIN',
-                sasl_plain_username=kafka_username,
-                sasl_plain_password=kafka_password,
-                # group_id='api-logs-viewer',
-                auto_offset_reset='earliest',
-                consumer_timeout_ms=5000
-            )
-        else:
-            consumer = KafkaConsumer(
-                'api-logs',
-                bootstrap_servers=kafka_servers,
-                value_deserializer=lambda m: json.loads(m.decode('utf-8')),
-                security_protocol='PLAINTEXT',
-                # group_id='api-logs-viewer',
-                auto_offset_reset='earliest',
-                consumer_timeout_ms=5000
-            )
-        
-        all_logs = []
-        try:
-            for message in consumer:
-                all_logs.append({
-                    'timestamp': message.value['timestamp'],
-                    'endpoint': message.value['endpoint'],
-                    'method': message.value['method'],
-                    'status': message.value['status'],
-                    'user_id': message.value['user_id'],
-                    'message': message.value['message']
-                })
-                if len(all_logs) >= 1000:  # 더 많은 로그를 가져와서 페이지네이션에 활용
-                    break
-        finally:
-            consumer.close()
+        # 메시징 시스템에서 로그 조회
+        messaging = get_messaging_system()
+        if messaging is None:
+            return jsonify({"status": "error", "message": "메시징 시스템을 초기화할 수 없습니다"}), 500
+            
+        all_logs = messaging.get_messages('api-logs', limit=1000)
+        messaging.close()
         
         # 시간 역순으로 정렬
         all_logs.sort(key=lambda x: x['timestamp'], reverse=True)
@@ -652,7 +576,7 @@ def get_kafka_logs():
             }
         })
     except Exception as e:
-        print(f"Kafka log retrieval error: {str(e)}")
+        print(f"Messaging log retrieval error: {str(e)}")
         return jsonify({"status": "error", "message": str(e)}), 500
 
 # 검색 캐시 통계 조회

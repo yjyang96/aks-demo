@@ -35,13 +35,15 @@ spec:
               key: MYSQL_PASSWORD
         - name: REDIS_HOST
           value: "${REDIS_HOST}-master"
-        - name: KAFKA_SERVERS
-          value: "${KAFKA_SERVERS}:9092"
         - name: REDIS_PASSWORD
           valueFrom:
             secretKeyRef:
               name: backend-secrets
               key: REDIS_PASSWORD
+        - name: MESSAGING_TYPE
+          value: "${MESSAGING_TYPE}"
+        - name: KAFKA_SERVERS
+          value: "${KAFKA_SERVERS}:9092"
         - name: KAFKA_USERNAME
           valueFrom:
             secretKeyRef:
@@ -52,6 +54,12 @@ spec:
             secretKeyRef:
               name: backend-secrets
               key: KAFKA_PASSWORD
+        - name: EVENTHUB_CONNECTION_STRING
+          value: "${EVENTHUB_CONNECTION_STRING}"
+        - name: EVENTHUB_NAME
+          value: "${EVENTHUB_NAME}"
+        - name: EVENTHUB_CONSUMER_GROUP
+          value: "${EVENTHUB_CONSUMER_GROUP}"
         - name: FLASK_SECRET_KEY
           valueFrom:
             secretKeyRef:
