@@ -73,6 +73,10 @@ class TelemetryManager:
             # Logger 설정
             set_logger_provider(self.logger_provider)
             
+            # LoggingHandler 설정으로 Python 로깅과 OpenTelemetry 로깅 연결
+            handler = LoggingHandler(level=logging.NOTSET, logger_provider=self.logger_provider)
+            logging.getLogger().addHandler(handler)
+            
             # Flask 앱이 제공된 경우 자동 계측
             if app:
                 self._instrument_flask(app)
@@ -109,9 +113,9 @@ class TelemetryManager:
         otlp_endpoint = os.getenv("OTLP_ENDPOINT")
         if otlp_endpoint:
             try:
-                otlp_metric_exporter = OTLPMetricExporter(endpoint=otlp_endpoint)
+                otlp_metric_exporter = OTLPMetricExporter(endpoint=otlp_endpoint + "/v1/metrics")
                 readers.append(PeriodicExportingMetricReader(otlp_metric_exporter))
-                logger.info(f"OTLP Metric Exporter 설정됨: {otlp_endpoint}")
+                logger.info(f"OTLP Metric Exporter 설정됨: {otlp_endpoint}/v1/metrics")
             except Exception as e:
                 logger.error(f"OTLP Metric Exporter 설정 실패: {str(e)}")
         
