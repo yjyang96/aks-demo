@@ -24,7 +24,7 @@ class FrontendTelemetry {
         try {
             // 리소스 설정
             const resource = new Resource({
-                [SemanticResourceAttributes.SERVICE_NAME]: 'aks-demo-frontend',
+                [SemanticResourceAttributes.SERVICE_NAME]: process.env.FRONTEND_SERVICE_NAME || 'yejun-frontend',
                 [SemanticResourceAttributes.SERVICE_VERSION]: '1.0.0',
                 [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: process.env.NODE_ENV || 'development'
             });
@@ -34,7 +34,7 @@ class FrontendTelemetry {
                 resource: resource
             });
 
-            // OTLP Exporter 설정 (Tempo)
+            // OTLP Exporter 설정 (LGTM Tempo)
             const otlpExporter = new OTLPTraceExporter({
                 url: process.env.VUE_APP_TEMPO_ENDPOINT || 'http://localhost:4317/v1/traces',
                 headers: {}

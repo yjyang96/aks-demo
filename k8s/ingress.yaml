@@ -18,7 +18,7 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: frontend-service
+            name: ${FRONTEND_SERVICE_NAME}-service
             port:
               number: 80
   - host: api.${K8S_NAMESPACE}.local
@@ -28,6 +28,6 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: backend-service
+            name: ${BACKEND_SERVICE_NAME}-service
             port:
               number: 5000

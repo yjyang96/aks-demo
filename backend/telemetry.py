@@ -13,6 +13,9 @@ from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.instrumentation.kafka import KafkaInstrumentor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
+from opentelemetry._logs import set_logger_provider
+from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+from opentelemetry.sdk._logs.export import BatchLogRecordProcessor, ConsoleLogExporter
 
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
@@ -24,6 +27,7 @@ class TelemetryManager:
     def __init__(self):
         self.tracer = None
         self.meter = None
+        self.logger_provider = None
         self.trace_provider = None
         self.meter_provider = None
         
@@ -31,8 +35,9 @@ class TelemetryManager:
         """OpenTelemetry 설정을 초기화합니다."""
         try:
             # 리소스 설정
+            service_name = os.getenv('BACKEND_SERVICE_NAME', 'backend')  # 세션을 위한 시크릿 키
             resource = Resource.create({
-                "service.name": "aks-demo-backend",
+                "service.name": service_name,
                 "service.version": "1.0.0",
                 "deployment.environment": "development"
             })
@@ -56,6 +61,17 @@ class TelemetryManager:
             # Metrics 설정
             metrics.set_meter_provider(self.meter_provider)
             self.meter = metrics.get_meter(__name__)
+            
+            # Logger Provider 설정
+            self.logger_provider = LoggerProvider(resource=resource)
+            
+            # Log Exporter 설정
+            log_exporters = self._setup_log_exporters()
+            for exporter in log_exporters:
+                self.logger_provider.add_log_record_processor(BatchLogRecordProcessor(exporter))
+            
+            # Logger 설정
+            set_logger_provider(self.logger_provider)
             
             # Flask 앱이 제공된 경우 자동 계측
             if app:
@@ -100,6 +116,31 @@ class TelemetryManager:
                 logger.error(f"OTLP Metric Exporter 설정 실패: {str(e)}")
         
         return readers
+    
+    def _setup_log_exporters(self):
+        """Log Exporter들을 설정합니다."""
+        exporters = []
+        
+        # OTLP Log Exporter (LGTM 스택)
+        otlp_endpoint = os.getenv("OTLP_ENDPOINT")
+        if otlp_endpoint:
+            try:
+                # OTLP HTTP Log Exporter를 사용
+                from opentelemetry.exporter.otlp.proto.http._log_exporter import OTLPLogExporter
+                log_exporter = OTLPLogExporter(endpoint=f"{otlp_endpoint}/v1/logs")
+                exporters.append(log_exporter)
+                logger.info(f"OTLP Log Exporter 설정됨: {otlp_endpoint}/v1/logs")
+            except Exception as e:
+                logger.error(f"OTLP Log Exporter 설정 실패: {str(e)}")
+                # 실패 시 Console Exporter 사용
+                exporters.append(ConsoleLogExporter())
+                logger.info("Console Log Exporter로 대체됨")
+        else:
+            # 기본적으로 Console Exporter 사용
+            exporters.append(ConsoleLogExporter())
+            logger.info("Console Log Exporter 설정됨")
+        
+        return exporters
     
     def _instrument_flask(self, app):
         """Flask 앱에 자동 계측을 적용합니다."""
@@ -152,6 +193,22 @@ class TelemetryManager:
             counter = self.meter.create_counter(name)
             counter.add(value, attributes=attributes or {})
     
+    def log_info(self, message, attributes=None):
+        """INFO 레벨 로그를 기록합니다."""
+        logger.info(f"[LGTM] {message}")
+    
+    def log_error(self, message, attributes=None):
+        """ERROR 레벨 로그를 기록합니다."""
+        logger.error(f"[LGTM] {message}")
+    
+    def log_warn(self, message, attributes=None):
+        """WARN 레벨 로그를 기록합니다."""
+        logger.warning(f"[LGTM] {message}")
+    
+    def log_debug(self, message, attributes=None):
+        """DEBUG 레벨 로그를 기록합니다."""
+        logger.debug(f"[LGTM] {message}")
+    
     def shutdown(self):
         """Telemetry 리소스를 정리합니다."""
         try:
@@ -159,6 +216,8 @@ class TelemetryManager:
                 self.trace_provider.shutdown()
             if self.meter_provider:
                 self.meter_provider.shutdown()
+            if self.logger_provider:
+                self.logger_provider.shutdown()
             logger.info("OpenTelemetry 리소스가 정리되었습니다.")
         except Exception as e:
             logger.error(f"OpenTelemetry 정리 오류: {str(e)}")

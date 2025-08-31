@@ -137,9 +137,17 @@ echo "  Image Pull Secrets: ${IMAGE_PULL_SECRETS:-없음}"
 export MESSAGING_TYPE="${MESSAGING_TYPE:-kafka}"
 export KAFKA_SERVERS="${KAFKA_SERVERS:-my-kafka}"
 
+# LGTM Telemetry 환경 변수 설정
+export TEMPO_ENDPOINT="${TEMPO_ENDPOINT:-http://collector.lgtm.20.249.154.255.nip.io/v1/traces}"
+export OTLP_ENDPOINT="${OTLP_ENDPOINT:-http://collector.lgtm.20.249.154.255.nip.io}"
+
 echo "📡 메시징 시스템 설정:"
 echo "  - MESSAGING_TYPE: ${MESSAGING_TYPE}"
 echo "  - KAFKA_SERVERS: ${KAFKA_SERVERS}"
+
+echo "📊 LGTM Telemetry 설정:"
+echo "  - TEMPO_ENDPOINT: ${TEMPO_ENDPOINT}"
+echo "  - OTLP_ENDPOINT: ${OTLP_ENDPOINT}"
 
 envsubst < k8s/backend-secret.yaml | kubectl apply -n "${K8S_NAMESPACE}" -f -
 
@@ -203,11 +211,11 @@ if [ "${ENV}" != "rancher" ]; then
   echo "   ${LB_IP} frontend.${K8S_NAMESPACE}.local api.${K8S_NAMESPACE}.local"
 else
   echo "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo "┃ 6) Rancher 환경 접근 정보"
-  echo "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-  echo "🔗 Rancher UI에서 서비스에 접근하세요:"
-  echo "   - 프론트엔드: frontend-service"
-  echo "   - 백엔드: backend-service"
+echo "┃ 6) Rancher 환경 접근 정보"
+echo "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "🔗 Rancher UI에서 서비스에 접근하세요:"
+echo "   - 프론트엔드: ${FRONTEND_SERVICE_NAME}-service"
+echo "   - 백엔드: ${BACKEND_SERVICE_NAME}-service"
 fi
 
 echo "✅ 배포 완료"

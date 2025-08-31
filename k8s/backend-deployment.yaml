@@ -1,17 +1,17 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: backend
+  name: ${BACKEND_SERVICE_NAME}
   namespace: ${K8S_NAMESPACE}
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: backend
+      app: ${BACKEND_SERVICE_NAME}
   template:
     metadata:
       labels:
-        app: backend
+        app: ${BACKEND_SERVICE_NAME}
     spec:
       imagePullSecrets:
       ${IMAGE_PULL_SECRETS}
@@ -70,16 +70,18 @@ spec:
           value: "${TEMPO_ENDPOINT}"
         - name: OTLP_ENDPOINT
           value: "${OTLP_ENDPOINT}"
+        - name: BACKEND_SERVICE_NAME
+          value: "${BACKEND_SERVICE_NAME}"
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: backend-service
+  name: ${BACKEND_SERVICE_NAME}-service
   namespace: ${K8S_NAMESPACE}
 spec:
   type: ClusterIP
   selector:
-    app: backend
+    app: ${BACKEND_SERVICE_NAME}
   ports:
   - port: 5000
     targetPort: 5000 
