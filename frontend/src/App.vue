@@ -335,6 +335,7 @@
 
 <script>
 import axios from 'axios';
+import frontendTelemetry from './telemetry';
 
 // nginx 프록시를 통해 요청하도록 수정
 const API_BASE_URL = '/api';
@@ -428,23 +429,51 @@ export default {
     
     // MariaDB에 메시지 저장
     async saveToDb() {
+      const startTime = performance.now();
+      
       try {
+        frontendTelemetry.trackUserAction('save_message_to_db', {
+          message_length: this.dbMessage.length,
+          component: 'db_section'
+        });
+        
         await axios.post(`${API_BASE_URL}/db/message`, {
           message: this.dbMessage
         });
+        
+        const duration = performance.now() - startTime;
+        frontendTelemetry.trackApiCall('POST', `${API_BASE_URL}/db/message`, 200, duration);
+        
         this.dbMessage = '';
         this.getFromDb();
         this.getRedisLogs();
       } catch (error) {
+        const duration = performance.now() - startTime;
+        frontendTelemetry.trackApiCall('POST', `${API_BASE_URL}/db/message`, (error.response && error.response.status) || 500, duration);
+        frontendTelemetry.trackError(error, {
+          context: 'save_message_to_db',
+          message_length: this.dbMessage.length
+        });
         console.error('DB 저장 실패:', error);
       }
     },
 
     // MariaDB에서 메시지 조회 (페이지네이션 적용)
     async getFromDb() {
+      const startTime = performance.now();
+      
       try {
         this.loading = true;
+        frontendTelemetry.trackUserAction('get_messages_from_db', {
+          page: this.currentPage,
+          limit: this.limit,
+          component: 'db_section'
+        });
+        
         const response = await axios.get(`${API_BASE_URL}/db/message?page=${this.currentPage}&limit=${this.limit}`);
+        
+        const duration = performance.now() - startTime;
+        frontendTelemetry.trackApiCall('GET', `${API_BASE_URL}/db/message`, 200, duration);
         
         // 페이지네이션 정보 처리
         if (response.data.messages) {
@@ -460,6 +489,13 @@ export default {
           this.dbData = response.data;
         }
       } catch (error) {
+        const duration = performance.now() - startTime;
+        frontendTelemetry.trackApiCall('GET', `${API_BASE_URL}/db/message`, (error.response && error.response.status) || 500, duration);
+        frontendTelemetry.trackError(error, {
+          context: 'get_messages_from_db',
+          page: this.currentPage,
+          limit: this.limit
+        });
         console.error('DB 조회 실패:', error);
       } finally {
         this.loading = false;
@@ -468,23 +504,50 @@ export default {
 
     // 샘플 데이터를 DB에 저장
     async insertSampleData() {
+      const startTime = performance.now();
       const randomMessage = this.sampleMessages[Math.floor(Math.random() * this.sampleMessages.length)];
+      
       try {
+        frontendTelemetry.trackUserAction('insert_sample_data', {
+          message: randomMessage,
+          component: 'db_section'
+        });
+        
         await axios.post(`${API_BASE_URL}/db/message`, {
           message: randomMessage
         });
+        
+        const duration = performance.now() - startTime;
+        frontendTelemetry.trackApiCall('POST', `${API_BASE_URL}/db/message`, 200, duration);
+        
         this.getFromDb();
         this.getRedisLogs();
       } catch (error) {
+        const duration = performance.now() - startTime;
+        frontendTelemetry.trackApiCall('POST', `${API_BASE_URL}/db/message`, (error.response && error.response.status) || 500, duration);
+        frontendTelemetry.trackError(error, {
+          context: 'insert_sample_data',
+          message: randomMessage
+        });
         console.error('샘플 데이터 저장 실패:', error);
       }
     },
 
     // Redis에 저장된 API 호출 로그 조회
     async getRedisLogs(page = 1) {
+      const startTime = performance.now();
+      
       try {
         this.redisLogsPage = page;
+        frontendTelemetry.trackUserAction('get_redis_logs', {
+          page: page,
+          component: 'redis_section'
+        });
+        
         const response = await axios.get(`${API_BASE_URL}/logs/redis?page=${page}&limit=20`);
+        
+        const duration = performance.now() - startTime;
+        frontendTelemetry.trackApiCall('GET', `${API_BASE_URL}/logs/redis`, 200, duration);
         
         if (response.data.logs) {
           this.redisLogs = response.data.logs;
@@ -495,17 +558,34 @@ export default {
           this.redisLogs = response.data;
         }
       } catch (error) {
+        const duration = performance.now() - startTime;
+        frontendTelemetry.trackApiCall('GET', `${API_BASE_URL}/logs/redis`, (error.response && error.response.status) || 500, duration);
+        frontendTelemetry.trackError(error, {
+          context: 'get_redis_logs',
+          page: page
+        });
         console.error('Redis 로그 조회 실패:', error);
       }
     },
 
     // Kafka에 저장된 API 호출 로그 조회
     async getKafkaLogs(page = 1) {
+      const startTime = performance.now();
+      
       try {
         this.kafkaLogsLoading = true;
         this.kafkaLogsError = null;
         this.kafkaLogsPage = page;
+        
+        frontendTelemetry.trackUserAction('get_kafka_logs', {
+          page: page,
+          component: 'kafka_section'
+        });
+        
         const response = await axios.get(`${API_BASE_URL}/logs/messaging?page=${page}&limit=20`);
+        
+        const duration = performance.now() - startTime;
+        frontendTelemetry.trackApiCall('GET', `${API_BASE_URL}/logs/messaging`, 200, duration);
         
         if (response.data.logs) {
           this.kafkaLogs = response.data.logs;
@@ -517,6 +597,12 @@ export default {
         }
         console.log('Kafka 로그 조회 성공:', this.kafkaLogs);
       } catch (error) {
+        const duration = performance.now() - startTime;
+        frontendTelemetry.trackApiCall('GET', `${API_BASE_URL}/logs/messaging`, (error.response && error.response.status) || 500, duration);
+        frontendTelemetry.trackError(error, {
+          context: 'get_kafka_logs',
+          page: page
+        });
         console.error('Kafka 로그 조회 실패:', error);
         this.kafkaLogsError = error.response && error.response.data && error.response.data.message 
           ? error.response.data.message 
@@ -536,13 +622,27 @@ export default {
 
     // 사용자 로그인 처리
     async login() {
+      const startTime = performance.now();
+      
       try {
+        frontendTelemetry.trackUserAction('login_attempt', {
+          username: this.username,
+          component: 'login_section'
+        });
+        
         const response = await axios.post(`${API_BASE_URL}/login`, {
           username: this.username,
           password: this.password
         });
         
+        const duration = performance.now() - startTime;
+        frontendTelemetry.trackApiCall('POST', `${API_BASE_URL}/login`, 200, duration);
+        
         if (response.data.status === 'success') {
+          frontendTelemetry.trackUserAction('login_success', {
+            username: this.username
+          });
+          
           this.isLoggedIn = true;
           this.currentUser = this.username;
           this.username = '';
@@ -551,9 +651,19 @@ export default {
           // 로그인 후 세션 정보 업데이트
           await this.checkSessionStatus();
         } else {
+          frontendTelemetry.trackError(new Error(response.data.message || '로그인 실패'), {
+            context: 'login_failed',
+            username: this.username
+          });
           alert(response.data.message || '로그인에 실패했습니다.');
         }
       } catch (error) {
+        const duration = performance.now() - startTime;
+        frontendTelemetry.trackApiCall('POST', `${API_BASE_URL}/login`, (error.response && error.response.status) || 500, duration);
+        frontendTelemetry.trackError(error, {
+          context: 'login_error',
+          username: this.username
+        });
         console.error('로그인 실패:', error);
         alert(error.response && error.response.data 
           ? error.response.data.message 
@@ -563,23 +673,86 @@ export default {
     
     // 로그아웃 처리
     async logout() {
+      const startTime = performance.now();
+      
       try {
-        await axios.post(`${API_BASE_URL}/logout`);
+        frontendTelemetry.trackUserAction('logout_attempt', {
+          username: this.currentUser,
+          component: 'user_section'
+        });
+        
+        await axios.post(`${API_BASE_URL}/logout`, {}, {
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        const duration = performance.now() - startTime;
+        frontendTelemetry.trackApiCall('POST', `${API_BASE_URL}/logout`, 200, duration);
+        
+        frontendTelemetry.trackUserAction('logout_success', {
+          username: this.currentUser
+        });
+        
         this.isLoggedIn = false;
         this.username = '';
         this.password = '';
         this.currentUser = null;
+
+        
+        // 로그아웃 후 모든 데이터 초기화
+        this.dbData = [];
+        this.redisLogs = [];
+        this.kafkaLogs = [];
+        this.searchResults = [];
+        this.allMessages = [];
+        this.currentPage = 1;
+        this.totalPages = 1;
+        this.totalMessages = 0;
+        this.searchPage = 1;
+        this.searchTotal = 0;
+        this.searchTotalPages = 1;
+        this.redisLogsPage = 1;
+        this.redisLogsTotal = 0;
+        this.redisLogsTotalPages = 1;
+        this.kafkaLogsPage = 1;
+        this.kafkaLogsTotal = 0;
+        this.kafkaLogsTotalPages = 1;
+        this.allMessagesPage = 1;
+        this.allMessagesTotal = 0;
+        this.allMessagesTotalPages = 1;
+        this.searchQuery = '';
+        this.searchExecuted = false;
+        this.showCacheManager = false;
+        this.cacheStats = {};
+        this.loading = false;
+        this.kafkaLogsLoading = false;
+        this.kafkaLogsError = null;
       } catch (error) {
+        const duration = performance.now() - startTime;
+        frontendTelemetry.trackApiCall('POST', `${API_BASE_URL}/logout`, (error.response && error.response.status) || 500, duration);
+        frontendTelemetry.trackError(error, {
+          context: 'logout_error',
+          username: this.currentUser
+        });
         console.error('로그아웃 실패:', error);
       }
     },
 
     // 메시지 검색 기능
     async searchMessages(page = 1) {
+      const startTime = performance.now();
+      
       try {
         this.loading = true;
         this.searchPage = page;
         this.searchExecuted = true; // 검색 실행됨을 표시
+        
+        frontendTelemetry.trackUserAction('search_messages', {
+          query: this.searchQuery,
+          page: page,
+          component: 'search_section'
+        });
         
         // 검색 시 전체 메시지 완전히 숨기기
         this.allMessages = [];
@@ -595,6 +768,9 @@ export default {
           }
         });
         
+        const duration = performance.now() - startTime;
+        frontendTelemetry.trackApiCall('GET', `${API_BASE_URL}/db/messages/search`, 200, duration);
+        
         if (response.data.results) {
           this.searchResults = response.data.results;
           this.searchTotal = response.data.pagination.total;
@@ -606,6 +782,13 @@ export default {
           this.searchTotalPages = 1;
         }
       } catch (error) {
+        const duration = performance.now() - startTime;
+        frontendTelemetry.trackApiCall('GET', `${API_BASE_URL}/db/messages/search`, (error.response && error.response.status) || 500, duration);
+        frontendTelemetry.trackError(error, {
+          context: 'search_messages',
+          query: this.searchQuery,
+          page: page
+        });
         console.error('검색 실패:', error);
         alert('검색에 실패했습니다.');
       } finally {
@@ -674,9 +857,17 @@ export default {
 
     // 전체 메시지 조회
     async getAllMessages(page = 1) {
+      const startTime = performance.now();
+      
       try {
         this.loading = true;
         this.allMessagesPage = page;
+        
+        frontendTelemetry.trackUserAction('get_all_messages', {
+          page: page,
+          component: 'search_section'
+        });
+        
         // 전체 메시지 조회 시 검색 결과 완전히 숨기기
         this.searchResults = [];
         this.searchPage = 1;
@@ -686,6 +877,9 @@ export default {
         this.searchExecuted = false; // 검색 실행 상태 초기화
         
         const response = await axios.get(`${API_BASE_URL}/db/messages?page=${page}&limit=20`);
+        
+        const duration = performance.now() - startTime;
+        frontendTelemetry.trackApiCall('GET', `${API_BASE_URL}/db/messages`, 200, duration);
         
         if (response.data.messages) {
           this.allMessages = response.data.messages;
@@ -698,6 +892,12 @@ export default {
           this.allMessagesTotalPages = 1;
         }
       } catch (error) {
+        const duration = performance.now() - startTime;
+        frontendTelemetry.trackApiCall('GET', `${API_BASE_URL}/db/messages`, (error.response && error.response.status) || 500, duration);
+        frontendTelemetry.trackError(error, {
+          context: 'get_all_messages',
+          page: page
+        });
         console.error('전체 메시지 로드 실패:', error);
       } finally {
         this.loading = false;
@@ -895,17 +1095,35 @@ export default {
     // 회원가입 처리
     async register() {
       if (this.registerPassword !== this.confirmPassword) {
+        frontendTelemetry.trackError(new Error('비밀번호 불일치'), {
+          context: 'register_validation',
+          username: this.registerUsername
+        });
         alert('비밀번호가 일치하지 않습니다');
         return;
       }
       
+      const startTime = performance.now();
+      
       try {
+        frontendTelemetry.trackUserAction('register_attempt', {
+          username: this.registerUsername,
+          component: 'register_section'
+        });
+        
         const response = await axios.post(`${API_BASE_URL}/register`, {
           username: this.registerUsername,
           password: this.registerPassword
         });
         
+        const duration = performance.now() - startTime;
+        frontendTelemetry.trackApiCall('POST', `${API_BASE_URL}/register`, 200, duration);
+        
         if (response.data.status === 'success') {
+          frontendTelemetry.trackUserAction('register_success', {
+            username: this.registerUsername
+          });
+          
           alert('회원가입이 완료되었습니다. 로그인해주세요.');
           this.showRegister = false;
           this.registerUsername = '';
@@ -913,6 +1131,12 @@ export default {
           this.confirmPassword = '';
         }
       } catch (error) {
+        const duration = performance.now() - startTime;
+        frontendTelemetry.trackApiCall('POST', `${API_BASE_URL}/register`, (error.response && error.response.status) || 500, duration);
+        frontendTelemetry.trackError(error, {
+          context: 'register_error',
+          username: this.registerUsername
+        });
         console.error('회원가입 실패:', error);
         alert(error.response && error.response.data && error.response.data.message 
           ? error.response.data.message 

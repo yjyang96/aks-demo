@@ -24,9 +24,9 @@ class FrontendTelemetry {
         try {
             // 리소스 설정
             const resource = new Resource({
-                [SemanticResourceAttributes.SERVICE_NAME]: process.env.FRONTEND_SERVICE_NAME || 'yejun-frontend',
+                [SemanticResourceAttributes.SERVICE_NAME]: 'yejun-frontend',
                 [SemanticResourceAttributes.SERVICE_VERSION]: '1.0.0',
-                [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: process.env.NODE_ENV || 'development'
+                [SemanticResourceAttributes.DEPLOYMENT_ENVIRONMENT]: 'development'
             });
 
             // Tracer Provider 설정
@@ -36,15 +36,15 @@ class FrontendTelemetry {
 
             // OTLP Exporter 설정 (LGTM Tempo)
             const otlpExporter = new OTLPTraceExporter({
-                url: process.env.VUE_APP_TEMPO_ENDPOINT || 'http://localhost:4317/v1/traces',
+                url: 'http://collector.lgtm.20.249.154.255.nip.io/v1/traces',
                 headers: {}
             });
 
             // Span Processor 설정
             this.provider.addSpanProcessor(new BatchSpanProcessor(otlpExporter));
 
-            // Tracer 설정
-            this.tracer = this.provider.getTracer('aks-demo-frontend');
+            // Tracer 설정 - 서비스 이름과 일치시킴
+            this.tracer = this.provider.getTracer('yejun-frontend');
 
             // 자동 계측 설정
             registerInstrumentations({
@@ -66,6 +66,8 @@ class FrontendTelemetry {
 
             this.isInitialized = true;
             console.log('✅ Frontend OpenTelemetry가 초기화되었습니다.');
+            console.log('🔗 Trace Endpoint: http://collector.lgtm.20.249.154.255.nip.io/v1/traces');
+            console.log('🏷️ Service Name: yejun-frontend');
 
         } catch (error) {
             console.error('❌ Frontend OpenTelemetry 초기화 오류:', error);
@@ -106,13 +108,17 @@ class FrontendTelemetry {
 
     // 사용자 액션 추적
     trackUserAction(action, details = {}) {
+        console.log('📊 Tracking user action:', action, details);
         const span = this.createSpan('user.action', {
             'user.action': action,
             'user.details': JSON.stringify(details)
         });
 
         if (span) {
+            console.log('✅ User action span created:', span.name);
             span.end();
+        } else {
+            console.warn('❌ Failed to create user action span');
         }
     }
 
