@@ -432,7 +432,16 @@ export default {
       const startTime = performance.now();
       
       try {
+        // Trace, Metric, Log 모두 기록
         frontendTelemetry.trackUserAction('save_message_to_db', {
+          message_length: this.dbMessage.length,
+          component: 'db_section'
+        });
+        frontendTelemetry.recordUserActionMetric('save_message_to_db', {
+          message_length: this.dbMessage.length,
+          component: 'db_section'
+        });
+        frontendTelemetry.log('사용자가 메시지를 저장하려고 시도함', 'info', {
           message_length: this.dbMessage.length,
           component: 'db_section'
         });
@@ -442,7 +451,14 @@ export default {
         });
         
         const duration = performance.now() - startTime;
+        // Trace, Metric, Log 모두 기록
         frontendTelemetry.trackApiCall('POST', `${API_BASE_URL}/db/message`, 200, duration);
+        frontendTelemetry.recordApiCallMetric('POST', `${API_BASE_URL}/db/message`, 200, duration);
+        frontendTelemetry.recordPerformanceMetric('save_message', duration);
+        frontendTelemetry.log('메시지 저장 성공', 'info', {
+          duration: duration,
+          message_length: this.dbMessage.length
+        });
         
         this.dbMessage = '';
         this.getFromDb();
@@ -450,7 +466,17 @@ export default {
       } catch (error) {
         const duration = performance.now() - startTime;
         frontendTelemetry.trackApiCall('POST', `${API_BASE_URL}/db/message`, (error.response && error.response.status) || 500, duration);
+        // Trace, Metric, Log 모두 기록 (오류)
         frontendTelemetry.trackError(error, {
+          context: 'save_message_to_db',
+          message_length: this.dbMessage.length
+        });
+        frontendTelemetry.recordMetric('save_message_errors_total', 1, {
+          context: 'save_message_to_db',
+          error_type: error.name || 'Error'
+        });
+        frontendTelemetry.log('메시지 저장 실패', 'error', {
+          error: error.message,
           context: 'save_message_to_db',
           message_length: this.dbMessage.length
         });
@@ -464,7 +490,18 @@ export default {
       
       try {
         this.loading = true;
+        // Trace, Metric, Log 모두 기록
         frontendTelemetry.trackUserAction('get_messages_from_db', {
+          page: this.currentPage,
+          limit: this.limit,
+          component: 'db_section'
+        });
+        frontendTelemetry.recordUserActionMetric('get_messages_from_db', {
+          page: this.currentPage,
+          limit: this.limit,
+          component: 'db_section'
+        });
+        frontendTelemetry.log('사용자가 메시지를 조회하려고 시도함', 'info', {
           page: this.currentPage,
           limit: this.limit,
           component: 'db_section'
@@ -473,7 +510,15 @@ export default {
         const response = await axios.get(`${API_BASE_URL}/db/message?page=${this.currentPage}&limit=${this.limit}`);
         
         const duration = performance.now() - startTime;
+        // Trace, Metric, Log 모두 기록
         frontendTelemetry.trackApiCall('GET', `${API_BASE_URL}/db/message`, 200, duration);
+        frontendTelemetry.recordApiCallMetric('GET', `${API_BASE_URL}/db/message`, 200, duration);
+        frontendTelemetry.recordPerformanceMetric('get_messages', duration);
+        frontendTelemetry.log('메시지 조회 성공', 'info', {
+          duration: duration,
+          page: this.currentPage,
+          limit: this.limit
+        });
         
         // 페이지네이션 정보 처리
         if (response.data.messages) {
@@ -491,7 +536,18 @@ export default {
       } catch (error) {
         const duration = performance.now() - startTime;
         frontendTelemetry.trackApiCall('GET', `${API_BASE_URL}/db/message`, (error.response && error.response.status) || 500, duration);
+        // Trace, Metric, Log 모두 기록 (오류)
         frontendTelemetry.trackError(error, {
+          context: 'get_messages_from_db',
+          page: this.currentPage,
+          limit: this.limit
+        });
+        frontendTelemetry.recordMetric('get_messages_errors_total', 1, {
+          context: 'get_messages_from_db',
+          error_type: error.name || 'Error'
+        });
+        frontendTelemetry.log('메시지 조회 실패', 'error', {
+          error: error.message,
           context: 'get_messages_from_db',
           page: this.currentPage,
           limit: this.limit
@@ -508,7 +564,16 @@ export default {
       const randomMessage = this.sampleMessages[Math.floor(Math.random() * this.sampleMessages.length)];
       
       try {
+        // Trace, Metric, Log 모두 기록
         frontendTelemetry.trackUserAction('insert_sample_data', {
+          message: randomMessage,
+          component: 'db_section'
+        });
+        frontendTelemetry.recordUserActionMetric('insert_sample_data', {
+          message: randomMessage,
+          component: 'db_section'
+        });
+        frontendTelemetry.log('사용자가 샘플 데이터를 저장하려고 시도함', 'info', {
           message: randomMessage,
           component: 'db_section'
         });
@@ -518,14 +583,31 @@ export default {
         });
         
         const duration = performance.now() - startTime;
+        // Trace, Metric, Log 모두 기록
         frontendTelemetry.trackApiCall('POST', `${API_BASE_URL}/db/message`, 200, duration);
+        frontendTelemetry.recordApiCallMetric('POST', `${API_BASE_URL}/db/message`, 200, duration);
+        frontendTelemetry.recordPerformanceMetric('insert_sample_data', duration);
+        frontendTelemetry.log('샘플 데이터 저장 성공', 'info', {
+          duration: duration,
+          message: randomMessage
+        });
         
         this.getFromDb();
         this.getRedisLogs();
       } catch (error) {
         const duration = performance.now() - startTime;
         frontendTelemetry.trackApiCall('POST', `${API_BASE_URL}/db/message`, (error.response && error.response.status) || 500, duration);
+        // Trace, Metric, Log 모두 기록 (오류)
         frontendTelemetry.trackError(error, {
+          context: 'insert_sample_data',
+          message: randomMessage
+        });
+        frontendTelemetry.recordMetric('insert_sample_data_errors_total', 1, {
+          context: 'insert_sample_data',
+          error_type: error.name || 'Error'
+        });
+        frontendTelemetry.log('샘플 데이터 저장 실패', 'error', {
+          error: error.message,
           context: 'insert_sample_data',
           message: randomMessage
         });
@@ -539,7 +621,16 @@ export default {
       
       try {
         this.redisLogsPage = page;
+        // Trace, Metric, Log 모두 기록
         frontendTelemetry.trackUserAction('get_redis_logs', {
+          page: page,
+          component: 'redis_section'
+        });
+        frontendTelemetry.recordUserActionMetric('get_redis_logs', {
+          page: page,
+          component: 'redis_section'
+        });
+        frontendTelemetry.log('사용자가 Redis 로그를 조회하려고 시도함', 'info', {
           page: page,
           component: 'redis_section'
         });
@@ -547,7 +638,14 @@ export default {
         const response = await axios.get(`${API_BASE_URL}/logs/redis?page=${page}&limit=20`);
         
         const duration = performance.now() - startTime;
+        // Trace, Metric, Log 모두 기록
         frontendTelemetry.trackApiCall('GET', `${API_BASE_URL}/logs/redis`, 200, duration);
+        frontendTelemetry.recordApiCallMetric('GET', `${API_BASE_URL}/logs/redis`, 200, duration);
+        frontendTelemetry.recordPerformanceMetric('get_redis_logs', duration);
+        frontendTelemetry.log('Redis 로그 조회 성공', 'info', {
+          duration: duration,
+          page: page
+        });
         
         if (response.data.logs) {
           this.redisLogs = response.data.logs;
@@ -560,7 +658,17 @@ export default {
       } catch (error) {
         const duration = performance.now() - startTime;
         frontendTelemetry.trackApiCall('GET', `${API_BASE_URL}/logs/redis`, (error.response && error.response.status) || 500, duration);
+        // Trace, Metric, Log 모두 기록 (오류)
         frontendTelemetry.trackError(error, {
+          context: 'get_redis_logs',
+          page: page
+        });
+        frontendTelemetry.recordMetric('get_redis_logs_errors_total', 1, {
+          context: 'get_redis_logs',
+          error_type: error.name || 'Error'
+        });
+        frontendTelemetry.log('Redis 로그 조회 실패', 'error', {
+          error: error.message,
           context: 'get_redis_logs',
           page: page
         });
@@ -577,7 +685,16 @@ export default {
         this.kafkaLogsError = null;
         this.kafkaLogsPage = page;
         
+        // Trace, Metric, Log 모두 기록
         frontendTelemetry.trackUserAction('get_kafka_logs', {
+          page: page,
+          component: 'kafka_section'
+        });
+        frontendTelemetry.recordUserActionMetric('get_kafka_logs', {
+          page: page,
+          component: 'kafka_section'
+        });
+        frontendTelemetry.log('사용자가 Kafka 로그를 조회하려고 시도함', 'info', {
           page: page,
           component: 'kafka_section'
         });
@@ -585,7 +702,14 @@ export default {
         const response = await axios.get(`${API_BASE_URL}/logs/messaging?page=${page}&limit=20`);
         
         const duration = performance.now() - startTime;
+        // Trace, Metric, Log 모두 기록
         frontendTelemetry.trackApiCall('GET', `${API_BASE_URL}/logs/messaging`, 200, duration);
+        frontendTelemetry.recordApiCallMetric('GET', `${API_BASE_URL}/logs/messaging`, 200, duration);
+        frontendTelemetry.recordPerformanceMetric('get_kafka_logs', duration);
+        frontendTelemetry.log('Kafka 로그 조회 성공', 'info', {
+          duration: duration,
+          page: page
+        });
         
         if (response.data.logs) {
           this.kafkaLogs = response.data.logs;
@@ -599,7 +723,17 @@ export default {
       } catch (error) {
         const duration = performance.now() - startTime;
         frontendTelemetry.trackApiCall('GET', `${API_BASE_URL}/logs/messaging`, (error.response && error.response.status) || 500, duration);
+        // Trace, Metric, Log 모두 기록 (오류)
         frontendTelemetry.trackError(error, {
+          context: 'get_kafka_logs',
+          page: page
+        });
+        frontendTelemetry.recordMetric('get_kafka_logs_errors_total', 1, {
+          context: 'get_kafka_logs',
+          error_type: error.name || 'Error'
+        });
+        frontendTelemetry.log('Kafka 로그 조회 실패', 'error', {
+          error: error.message,
           context: 'get_kafka_logs',
           page: page
         });
@@ -625,7 +759,16 @@ export default {
       const startTime = performance.now();
       
       try {
+        // Trace, Metric, Log 모두 기록
         frontendTelemetry.trackUserAction('login_attempt', {
+          username: this.username,
+          component: 'login_section'
+        });
+        frontendTelemetry.recordUserActionMetric('login_attempt', {
+          username: this.username,
+          component: 'login_section'
+        });
+        frontendTelemetry.log('사용자 로그인 시도', 'info', {
           username: this.username,
           component: 'login_section'
         });
@@ -636,10 +779,25 @@ export default {
         });
         
         const duration = performance.now() - startTime;
+        // Trace, Metric, Log 모두 기록
         frontendTelemetry.trackApiCall('POST', `${API_BASE_URL}/login`, 200, duration);
+        frontendTelemetry.recordApiCallMetric('POST', `${API_BASE_URL}/login`, 200, duration);
+        frontendTelemetry.recordPerformanceMetric('login', duration);
+        frontendTelemetry.log('로그인 API 호출 성공', 'info', {
+          duration: duration,
+          username: this.username
+        });
         
         if (response.data.status === 'success') {
           frontendTelemetry.trackUserAction('login_success', {
+            username: this.username
+          });
+          
+          // Trace, Metric, Log 모두 기록
+          frontendTelemetry.recordUserActionMetric('login_success', {
+            username: this.username
+          });
+          frontendTelemetry.log('사용자 로그인 성공', 'info', {
             username: this.username
           });
           
@@ -651,16 +809,36 @@ export default {
           // 로그인 후 세션 정보 업데이트
           await this.checkSessionStatus();
         } else {
-          frontendTelemetry.trackError(new Error(response.data.message || '로그인 실패'), {
-            context: 'login_failed',
-            username: this.username
-          });
+                  // Trace, Metric, Log 모두 기록 (로그인 실패)
+        frontendTelemetry.trackError(new Error(response.data.message || '로그인 실패'), {
+          context: 'login_failed',
+          username: this.username
+        });
+        frontendTelemetry.recordMetric('login_failures_total', 1, {
+          context: 'login_failed',
+          username: this.username
+        });
+        frontendTelemetry.log('로그인 실패', 'warn', {
+          context: 'login_failed',
+          username: this.username,
+          reason: response.data.message || '로그인 실패'
+        });
           alert(response.data.message || '로그인에 실패했습니다.');
         }
       } catch (error) {
         const duration = performance.now() - startTime;
         frontendTelemetry.trackApiCall('POST', `${API_BASE_URL}/login`, (error.response && error.response.status) || 500, duration);
+        // Trace, Metric, Log 모두 기록 (로그인 오류)
         frontendTelemetry.trackError(error, {
+          context: 'login_error',
+          username: this.username
+        });
+        frontendTelemetry.recordMetric('login_errors_total', 1, {
+          context: 'login_error',
+          error_type: error.name || 'Error'
+        });
+        frontendTelemetry.log('로그인 오류 발생', 'error', {
+          error: error.message,
           context: 'login_error',
           username: this.username
         });
