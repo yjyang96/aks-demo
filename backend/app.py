@@ -4,7 +4,7 @@ from flask_session import Session
 import redis
 import mysql.connector
 import json
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import os
 from messaging_interface import async_log_api_stats
 from functools import wraps
@@ -162,7 +162,7 @@ def update_session_activity():
     if 'user_id' in session:
         # Flask-Session이 자동으로 세션을 Redis에 저장하므로
         # 단순히 last_activity만 업데이트
-        session['last_activity'] = datetime.now().isoformat()
+        session['last_activity'] = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()
         session.modified = True  # 세션 변경사항을 Redis에 저장
         
         # 세션 활동 업데이트 로깅 (너무 자주 로깅되지 않도록 간헐적으로)
@@ -271,7 +271,7 @@ def log_to_redis(action, details):
     try:
         redis_client = get_redis_connection()
         log_entry = {
-            'timestamp': datetime.now().isoformat(),
+            'timestamp': datetime.utcnow().replace(tzinfo=timezone.utc).isoformat(),
             'action': action,
             'details': details
         }
@@ -470,8 +470,8 @@ def login():
         # 세션을 영구적으로 설정
         session.permanent = True
         session['user_id'] = username
-        session['login_time'] = datetime.now().isoformat()
-        session['last_activity'] = datetime.now().isoformat()
+        session['login_time'] = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()
+        session['last_activity'] = datetime.utcnow().replace(tzinfo=timezone.utc).isoformat()
         session['user_agent'] = request.headers.get('User-Agent', '')
         session['remote_addr'] = request.remote_addr or 'unknown'
         session['browser_id'] = hashlib.md5(f"{request.headers.get('User-Agent', '')}:{request.remote_addr or 'unknown'}".encode()).hexdigest()[:12]
@@ -676,8 +676,8 @@ def search_messages():
         cache_data = {
             "query": query,
             "results": all_results,
-            "timestamp": datetime.now().isoformat(),
-            "expires_at": (datetime.now() + timedelta(minutes=1)).isoformat(),
+            "timestamp": datetime.utcnow().replace(tzinfo=timezone.utc).isoformat(),
+            "expires_at": (datetime.utcnow() + timedelta(minutes=1)).replace(tzinfo=timezone.utc).isoformat(),
             "hit_count": 1
         }
         redis_client.set(cache_key, json.dumps(cache_data, default=serialize_datetime))

@@ -424,7 +424,8 @@ export default {
     formatDate(dateString) {
       if (!dateString) return '알 수 없음';
       const date = new Date(dateString);
-      return date.toLocaleString();
+      // UTC 시간을 한국 시간으로 변환
+      return date.toLocaleString("ko-KR", {timeZone: "Asia/Seoul"});
     },
     
     // MariaDB에 메시지 저장

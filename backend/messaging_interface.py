@@ -1,7 +1,7 @@
 import os
 import json
 from abc import ABC, abstractmethod
-from datetime import datetime
+from datetime import datetime, timezone
 from threading import Thread
 import logging
 from telemetry import telemetry_manager
@@ -266,7 +266,7 @@ def async_log_api_stats(endpoint, method, status, user_id):
         try:
             messaging = MessagingFactory.create_messaging()
             log_data = {
-                'timestamp': datetime.now().isoformat(),
+                'timestamp': datetime.utcnow().replace(tzinfo=timezone.utc).isoformat(),
                 'endpoint': endpoint,
                 'method': method,
                 'status': status,
