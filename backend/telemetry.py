@@ -11,6 +11,7 @@ from opentelemetry.instrumentation.flask import FlaskInstrumentor
 from opentelemetry.instrumentation.mysql import MySQLInstrumentor
 from opentelemetry.instrumentation.redis import RedisInstrumentor
 from opentelemetry.instrumentation.kafka import KafkaInstrumentor
+from opentelemetry.instrumentation.logging import LoggingInstrumentor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 from opentelemetry.exporter.otlp.proto.http.metric_exporter import OTLPMetricExporter
 from opentelemetry._logs import set_logger_provider
@@ -30,12 +31,13 @@ class TelemetryManager:
         self.logger_provider = None
         self.trace_provider = None
         self.meter_provider = None
+        self.logging_instrumentor = None
         
     def setup_telemetry(self, app=None):
         """OpenTelemetry 설정을 초기화합니다."""
         try:
             # 리소스 설정
-            service_name = os.getenv('BACKEND_SERVICE_NAME', 'backend')  # 세션을 위한 시크릿 키
+            service_name = os.getenv('BACKEND_SERVICE_NAME', 'backend')
             resource = Resource.create({
                 "service.name": service_name,
                 "service.version": "1.0.0",
@@ -73,6 +75,14 @@ class TelemetryManager:
             # Logger 설정
             set_logger_provider(self.logger_provider)
             
+            # LoggingInstrumentor로 Python 로깅과 OpenTelemetry 연동
+            # 이렇게 하면 모든 로그에 trace_id, span_id, service.name이 자동으로 포함됩니다
+            self.logging_instrumentor = LoggingInstrumentor()
+            self.logging_instrumentor.instrument(
+                set_logging_format=True,  # 로그 포맷에 trace context 자동 포함
+                log_level=logging.INFO
+            )
+            
             # LoggingHandler 설정으로 Python 로깅과 OpenTelemetry 로깅 연결
             handler = LoggingHandler(level=logging.NOTSET, logger_provider=self.logger_provider)
             logging.getLogger().addHandler(handler)
@@ -84,7 +94,7 @@ class TelemetryManager:
             # 데이터베이스 및 Redis 자동 계측
             self._instrument_databases()
             
-            logger.info("✅ OpenTelemetry 설정이 완료되었습니다.")
+            logger.info("✅ OpenTelemetry 설정이 완료되었습니다. 로그와 트레이스가 연동됩니다.")
             
         except Exception as e:
             logger.error(f"❌ OpenTelemetry 설정 오류: {str(e)}")
@@ -198,24 +208,46 @@ class TelemetryManager:
             counter.add(value, attributes=attributes or {})
     
     def log_info(self, message, attributes=None):
-        """INFO 레벨 로그를 기록합니다."""
+        """INFO 레벨 로그를 기록합니다. 트레이스 컨텍스트가 자동으로 포함됩니다."""
+        # LoggingInstrumentor가 설정되어 있으므로 trace_id, span_id가 자동으로 포함됩니다
         logger.info(f"[LGTM] {message}")
     
     def log_error(self, message, attributes=None):
-        """ERROR 레벨 로그를 기록합니다."""
+        """ERROR 레벨 로그를 기록합니다. 트레이스 컨텍스트가 자동으로 포함됩니다."""
         logger.error(f"[LGTM] {message}")
     
     def log_warn(self, message, attributes=None):
-        """WARN 레벨 로그를 기록합니다."""
+        """WARN 레벨 로그를 기록합니다. 트레이스 컨텍스트가 자동으로 포함됩니다."""
         logger.warning(f"[LGTM] {message}")
     
     def log_debug(self, message, attributes=None):
-        """DEBUG 레벨 로그를 기록합니다."""
+        """DEBUG 레벨 로그를 기록합니다. 트레이스 컨텍스트가 자동으로 포함됩니다."""
         logger.debug(f"[LGTM] {message}")
+    
+    def log_with_span(self, message, level="info", attributes=None):
+        """현재 활성 Span이 있는 컨텍스트에서 로그를 기록합니다."""
+        current_span = trace.get_current_span()
+        if current_span and current_span.is_recording():
+            # Span에 로그 이벤트 추가
+            current_span.add_event(message, attributes=attributes or {})
+        
+        # 일반 로그도 기록 (트레이스 컨텍스트 자동 포함)
+        if level.lower() == "error":
+            self.log_error(message, attributes)
+        elif level.lower() == "warn":
+            self.log_warn(message, attributes)
+        elif level.lower() == "debug":
+            self.log_debug(message, attributes)
+        else:
+            self.log_info(message, attributes)
     
     def shutdown(self):
         """Telemetry 리소스를 정리합니다."""
         try:
+            # LoggingInstrumentor 비활성화
+            if self.logging_instrumentor:
+                self.logging_instrumentor.uninstrument()
+            
             if self.trace_provider:
                 self.trace_provider.shutdown()
             if self.meter_provider:

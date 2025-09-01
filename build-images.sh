@@ -2,15 +2,33 @@
 
 set -euo pipefail
 
-# 사용법: ./build-images.sh [ENV] [TAG] [PLATFORM]
+# 사용법: ./build-images.sh [BUILD_TYPE] [ENV] [PLATFORM]
+# - BUILD_TYPE: 빌드할 이미지 타입 (기본값: a)
+#   · b: 백엔드만 빌드
+#   · f: 프론트엔드만 빌드  
+#   · a: 전체 빌드 (백엔드 + 프론트엔드)
 # - ENV: env/.env.${ENV} 로드 (기본값: rancher)
 #   · rancher: 로컬 도커에만 빌드/태깅
 #   · azure: 로컬 도커에 빌드 후 ACR에 태그/푸시까지 수행
-# - TAG: 이미지 태그 (기본값: latest)
 # - PLATFORM: docker 빌드 플랫폼 (예: linux/amd64, linux/arm64). 미지정 시 현재 머신 기준 자동 결정
 
-ENV_NAME=${1:-rancher}
-IMAGE_TAG=${2:-latest}
+BUILD_TYPE=${1:-a}
+ENV_NAME=${2:-rancher}
+IMAGE_TAG="latest"  # 태그는 latest로 고정
+
+# 빌드 타입 검증
+case "${BUILD_TYPE}" in
+  b|f|a)
+    ;;
+  *)
+    echo "❌ 잘못된 빌드 타입입니다: ${BUILD_TYPE}"
+    echo "사용법: ./build-images.sh [BUILD_TYPE] [ENV] [PLATFORM]"
+    echo "  BUILD_TYPE: b(백엔드), f(프론트엔드), a(전체)"
+    echo "  ENV: rancher, azure"
+    echo "  PLATFORM: linux/amd64, linux/arm64"
+    exit 1
+    ;;
+esac
 
 # 플랫폼 자동 결정 (3번째 인자 우선)
 HOST_ARCH="$(uname -m)"
@@ -45,31 +63,45 @@ fi
 BACKEND_IMAGE_NAME="${ACR_REPO_NAME_BACKEND}:${IMAGE_TAG}"
 FRONTEND_IMAGE_NAME="${ACR_REPO_NAME_FRONTEND}:${IMAGE_TAG}"
 
-# 기존 이미지 강제 삭제 (선택적)
-# echo "🧹 기존 이미지 정리 중..."
-# docker rmi "${BACKEND_IMAGE_NAME}" 2>/dev/null || true
-# docker rmi "${FRONTEND_IMAGE_NAME}" 2>/dev/null || true
-
 echo "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "┃ 1) Backend 이미지 빌드 → ${BACKEND_IMAGE_NAME} (${BUILD_PLATFORM})"
+echo "┃ 빌드 설정"
+echo "┃ • 타입: ${BUILD_TYPE} (b:백엔드, f:프론트엔드, a:전체)"
+echo "┃ • 환경: ${ENV_NAME}"
+echo "┃ • 플랫폼: ${BUILD_PLATFORM}"
+echo "┃ • 태그: ${IMAGE_TAG}"
 echo "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-docker build \
-  --platform "${BUILD_PLATFORM}" \
-  --no-cache \
-  -t "${BACKEND_IMAGE_NAME}" \
-  -f "${ROOT_DIR}/backend/Dockerfile" \
-  "${ROOT_DIR}/backend"
 
-echo "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "┃ 2) Frontend 이미지 빌드 → ${FRONTEND_IMAGE_NAME} (${BUILD_PLATFORM})"
-echo "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-docker build \
-  --platform "${BUILD_PLATFORM}" \
-  --no-cache \
-  -t "${FRONTEND_IMAGE_NAME}" \
-  -f "${ROOT_DIR}/frontend/Dockerfile" \
-  "${ROOT_DIR}/frontend"
+# 백엔드 빌드
+if [ "${BUILD_TYPE}" = "b" ] || [ "${BUILD_TYPE}" = "a" ]; then
+  echo ""
+  echo "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "┃ 1) Backend 이미지 빌드 → ${BACKEND_IMAGE_NAME} (${BUILD_PLATFORM})"
+  echo "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  docker build \
+    --platform "${BUILD_PLATFORM}" \
+    --no-cache \
+    -t "${BACKEND_IMAGE_NAME}" \
+    -f "${ROOT_DIR}/backend/Dockerfile" \
+    "${ROOT_DIR}/backend"
+  echo "✅ 백엔드 빌드 완료"
+fi
 
+# 프론트엔드 빌드
+if [ "${BUILD_TYPE}" = "f" ] || [ "${BUILD_TYPE}" = "a" ]; then
+  echo ""
+  echo "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  echo "┃ 2) Frontend 이미지 빌드 → ${FRONTEND_IMAGE_NAME} (${BUILD_PLATFORM})"
+  echo "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+  docker build \
+    --platform "${BUILD_PLATFORM}" \
+    --no-cache \
+    -t "${FRONTEND_IMAGE_NAME}" \
+    -f "${ROOT_DIR}/frontend/Dockerfile" \
+    "${ROOT_DIR}/frontend"
+  echo "✅ 프론트엔드 빌드 완료"
+fi
+
+echo ""
 echo "✅ 로컬 Docker에 이미지가 생성되었습니다. (platform=${BUILD_PLATFORM})"
 echo "ℹ️ 배포 스크립트에서 ENV=rancher 를 사용하면 위 이름으로 바로 참조됩니다."
 
@@ -116,17 +148,32 @@ if [ "${ENV_NAME}" = "azure" ]; then
   BACKEND_ACR_IMAGE="${ACR_LOGIN_SERVER}/${ACR_REPO_NAME_BACKEND}:${IMAGE_TAG}"
   FRONTEND_ACR_IMAGE="${ACR_LOGIN_SERVER}/${ACR_REPO_NAME_FRONTEND}:${IMAGE_TAG}"
 
-  echo "🏷️  태깅: ${BACKEND_IMAGE_NAME} -> ${BACKEND_ACR_IMAGE}"
-  docker tag "${BACKEND_IMAGE_NAME}" "${BACKEND_ACR_IMAGE}"
-  echo "🏷️  태깅: ${FRONTEND_IMAGE_NAME} -> ${FRONTEND_ACR_IMAGE}"
-  docker tag "${FRONTEND_IMAGE_NAME}" "${FRONTEND_ACR_IMAGE}"
+  # 백엔드 푸시
+  if [ "${BUILD_TYPE}" = "b" ] || [ "${BUILD_TYPE}" = "a" ]; then
+    echo "🏷️  태깅: ${BACKEND_IMAGE_NAME} -> ${BACKEND_ACR_IMAGE}"
+    docker tag "${BACKEND_IMAGE_NAME}" "${BACKEND_ACR_IMAGE}"
+    echo "📤 푸시: ${BACKEND_ACR_IMAGE}"
+    docker push "${BACKEND_ACR_IMAGE}"
+  fi
 
-  echo "📤 푸시: ${BACKEND_ACR_IMAGE}"
-  docker push "${BACKEND_ACR_IMAGE}"
-  echo "📤 푸시: ${FRONTEND_ACR_IMAGE}"
-  docker push "${FRONTEND_ACR_IMAGE}"
+  # 프론트엔드 푸시
+  if [ "${BUILD_TYPE}" = "f" ] || [ "${BUILD_TYPE}" = "a" ]; then
+    echo "🏷️  태깅: ${FRONTEND_IMAGE_NAME} -> ${FRONTEND_ACR_IMAGE}"
+    docker tag "${FRONTEND_IMAGE_NAME}" "${FRONTEND_ACR_IMAGE}"
+    echo "📤 푸시: ${FRONTEND_ACR_IMAGE}"
+    docker push "${FRONTEND_ACR_IMAGE}"
+  fi
 
   echo "✅ ACR 푸시 완료"
   echo "ℹ️ 배포 시: ./deploy-with-env.sh azure true 로 이미지 풀/배포가 가능합니다."
 fi
+
+echo ""
+echo "🎉 빌드 완료!"
+echo "사용 예시:"
+echo "  ./build-images.sh b    # 백엔드만 빌드"
+echo "  ./build-images.sh f    # 프론트엔드만 빌드"
+echo "  ./build-images.sh a    # 전체 빌드"
+echo "  ./build-images.sh b azure    # 백엔드만 Azure ACR에 푸시"
+echo "  ./build-images.sh f rancher linux/arm64    # 프론트엔드만 ARM64로 빌드"
 

@@ -14,5 +14,6 @@ opentelemetry-instrumentation-flask
 opentelemetry-instrumentation-mysql
 opentelemetry-instrumentation-redis
 opentelemetry-instrumentation-kafka-python
+opentelemetry-instrumentation-logging
 opentelemetry-exporter-otlp-proto-http
 requests
